@@ -162,6 +162,21 @@ async function uiTests() {
     assert(/wa\.me\/447500000000/.test(href) && href.includes(encodeURIComponent('?k=JAMES1')), href);
     await ep.screenshot({ path: __dirname + '/shots/desk-crew.png', fullPage: true });
   });
+  await check('desktop: Email link opens a Gmail draft in a new tab', async function () {
+    var a = await ep.$('.crew a.link[href*="mail.google.com"]');
+    assert(a, 'no gmail link');
+    assert.strictEqual(await a.getAttribute('target'), '_blank');
+    assert((await a.getAttribute('href')).includes('to=j%40x.com'));
+    var pop = ep.waitForEvent('popup');
+    await a.click();
+    var w = await pop; assert(/mail\.google\.com/.test(w.url()) || w.url() === 'about:blank'); await w.close();
+    assert(await ep.$('.crew .contact'), 'panel closed on click');
+  });
+  await check('phone: email is a mailto', async function () {
+    await page.click('[data-tab=crew]'); await page.click('.crew [data-n="1"]');
+    assert(/^mailto:m@x\.com/.test(await page.getAttribute('.crew .contact a[href^="mailto:"]', 'href')));
+    await page.click('[data-tab=kit]');
+  });
   await check('phone: sees Elliot\'s confirm within a poll', async function () {
     await page.evaluate(function () { document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForFunction(function () { return /confirmed 2/.test(document.querySelector('.count').textContent); }, null, { timeout: 12000 });

@@ -38,8 +38,12 @@
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || String(a).localeCompare(b);
   }
   function first(name) { return String(name || '').split(' ')[0]; }
+  // Laptops: open a Gmail draft in a new tab (mailto: does nothing without a mail app).
+  // Phones: mailto opens whichever mail app they use.
+  var DESK = window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
   function mailto(list, subject, body) {
     var to = list.filter(Boolean).join(',');
+    if (DESK) return 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) + '&su=' + encodeURIComponent(subject || '') + (body ? '&body=' + encodeURIComponent(body) : '');
     return 'mailto:' + to + '?subject=' + encodeURIComponent(subject || '') + (body ? '&body=' + encodeURIComponent(body) : '');
   }
   function linkFor(k) { return location.origin + location.pathname + '?k=' + encodeURIComponent(k); }
@@ -290,7 +294,7 @@
     h += '<label>Notes<input name="notes" id="ed_notes" value="' + esc(i.notes) + '"></label>';
     h += '<p class="grey small">Asked by ' + esc(i.asked_by || '-') + (i.source && i.source !== 'app' ? ' · from ' + esc(i.source) : '') + (i.confirmed ? ' · confirmed ' + esc(i.confirmed) : '') + (i.packed ? ' · packed ' + esc(i.packed) : '') + '</p>';
     h += '<div class="row"><button type="submit">Save</button>';
-    h += '<a class="btn" href="' + esc(mailto(S.crew.map(function (c) { return c.email; }), S.job.title + ': ' + i.item, i.item + (i.qty ? ' x' + i.qty : '') + '\n\n')) + '">Email crew</a>';
+    h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(mailto(S.crew.map(function (c) { return c.email; }), S.job.title + ': ' + i.item, i.item + (i.qty ? ' x' + i.qty : '') + '\n\n')) + '">Email crew</a>';
     if (S.me.admin || (same(i.asked_by, S.me.name) && !i.confirmed)) h += '<button type="button" class="link red" data-act="delitem" data-id="' + esc(i.id) + '">Remove</button>';
     h += '</div></form></li>';
     return h;
@@ -369,12 +373,12 @@
       if (open) {
         h += '<div class="contact">';
         if (c.phone) h += '<a href="tel:' + esc(c.phone.replace(/\s/g, '')) + '">' + esc(c.phone) + '</a> ';
-        if (c.email) h += '<a href="' + esc(mailto([c.email], S.job.title)) + '">' + esc(c.email) + '</a>';
+        if (c.email) h += '<a target="_blank" rel="noopener" href="' + esc(mailto([c.email], S.job.title)) + '">' + esc(c.email) + '</a>';
         if (S.me.admin && c.key) {
           var link = linkFor(c.key);
           h += '<div class="row"><button class="link" data-act="copy" data-text="' + esc(link) + '">Copy link</button>';
           h += '<a class="link" target="_blank" rel="noopener" href="https://wa.me/' + esc((c.phone || '').replace(/[^\d]/g, '').replace(/^0/, '44')) + '?text=' + encodeURIComponent('hey ' + first(c.name).toLowerCase() + ', everything for ' + S.job.title + ' is on here, kit, tasks & crew. add your kit & tick stuff off as it\'s sorted:\n\n' + link) + '">WhatsApp link</a>';
-          h += '<a class="link" href="' + esc(mailto([c.email], S.job.title + ': Hymn Sheet', 'Hey ' + first(c.name) + ',\n\nEverything for ' + S.job.title + ' is on here: kit, tasks & crew. Add your kit & tick stuff off as it\'s sorted:\n\n' + link + '\n\nThanks!\nElliot')) + '">Email link</a></div>';
+          if (c.email) h += '<a class="link" target="_blank" rel="noopener" href="' + esc(mailto([c.email], S.job.title + ': Hymn Sheet', 'Hey ' + first(c.name) + ',\n\nEverything for ' + S.job.title + ' is on here: kit, tasks & crew. Add your kit & tick stuff off as it\'s sorted:\n\n' + link + '\n\nThanks!\nElliot')) + '">Email link</a></div>';
         }
         h += '</div>';
       }
@@ -382,7 +386,7 @@
     });
     h += '</ul>';
     var emails = S.crew.map(function (c) { return c.email; }).filter(Boolean);
-    if (emails.length) h += '<p class="gap"><a class="btn" href="' + esc(mailto(emails, S.job.title)) + '">Email everyone</a></p>';
+    if (emails.length) h += '<p class="gap"><a class="btn" target="_blank" rel="noopener" href="' + esc(mailto(emails, S.job.title)) + '">Email everyone</a></p>';
     h += '</section>';
     if (S.me.admin) {
       if (!ui.addCrew) h += '<p><button class="wide" data-act="addcrew">+ Add crew</button></p>';
@@ -416,6 +420,7 @@
   function stamp() { return S.me.name + ' · now'; }
 
   root.addEventListener('click', function (e) {
+    if (e.target.closest('a')) return; // links (call, email, WhatsApp) just open
     var t = e.target.closest('[data-tab],[data-act]');
     if (!t) return;
     if (t.hasAttribute('data-tab')) { ui.tab = t.getAttribute('data-tab'); store('hymn_tab', ui.tab); ui.open = null; render(); window.scrollTo(0, 0); return; }
