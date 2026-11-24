@@ -432,7 +432,7 @@
   var OPEN_ROLES = ['Grip', 'Gaffer', 'Spark', '1st AC', '2nd AC', 'DIT', 'Steadicam op', 'Playback', 'Production', 'Art dept'];
   var UNNAMED = ' (not named yet)';
   var ROLE_MATCH = { 'Grip': /grip/i, 'Gaffer': /gaffer/i, 'Spark': /spark|electric/i, '1st AC': /1st ac|focus/i, '2nd AC': /2nd ac|clapper|loader/i,
-    'DIT': /\bdit\b|data/i, 'Steadicam op': /steadicam/i, 'Playback': /playback|vtr|video/i, 'Production': /production|producer|coordinator|\bpm\b/i, 'Art dept': /\bart\b|designer|props/i };
+    'DIT': /\bdit\b|data/i, 'Steadicam op': /steadicam|operator|handheld/i, 'Playback': /playback|vtr|video/i, 'Production': /production|producer|coordinator|\bpm\b/i, 'Art dept': /\bart\b|designer|props/i };
   function isUnnamed(n) { return String(n || '').indexOf(UNNAMED) > 0; }
   // Someone on the crew already does this role (Mark, Gaffer).
   function bookedAs(role) { var re = ROLE_MATCH[role]; return re ? S.crew.filter(function (c) { return re.test(c.role || ''); })[0] : null; }
