@@ -276,6 +276,13 @@ async function uiTests() {
     var t = await ep.textContent('.crew');
     assert(/James Burns2nd AC · online now/.test(t) && /kit in/.test(t), t);
   });
+  await check('desktop: "Grip (not named yet)" as who brings it raises a flag', async function () {
+    act(b, 'ADMIN1', { a: 'add_item', item: 'Dolly + track', dept: 'Grip', owner: 'Grip (not named yet)' });
+    await ep.reload(); await ep.click('[data-tab=kit]'); await ep.waitForSelector('.flags');
+    var t = await ep.textContent('.flags'); if (/Show all/.test(t)) { await ep.click('[data-act=allflags]'); t = await ep.textContent('.flags'); }
+    assert(/Grip not booked yet, so nobody's bringing: Dolly \+ track\. Louis to book one\?/.test(t), t);
+    await ep.click('[data-tab=kit]');
+  });
   await check('desktop: Elliot confirms an item', async function () {
     await ep.click('[data-tab=kit]');
     var id = b.get({ a: 'state', k: 'ADMIN1' }).items.filter(function (i) { return i.item === 'Vaxis TX + 3 RX'; })[0].id;

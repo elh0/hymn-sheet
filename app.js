@@ -251,6 +251,13 @@
     });
     var noSup = S.items.filter(function (i) { return !i.supplier || same(i.supplier, 'TBC'); });
     if (noSup.length) out.push({ text: noSup.length + ' item' + (noSup.length > 1 ? 's' : '') + ' with no supplier: ' + noSup.slice(0, 4).map(function (i) { return i.item; }).join(', ') + (noSup.length > 4 ? '…' : ''), auto: 'nosupplier' });
+    var roleless = {};
+    S.items.concat(S.tasks).forEach(function (i) { var w = i.owner || i.who; if (isUnnamed(w)) (roleless[w] = roleless[w] || []).push(i.item || i.task); });
+    Object.keys(roleless).forEach(function (w) {
+      var l = roleless[w];
+      var booker = S.crew.filter(function (c) { return /production|producer|coordinator|\bpm\b/i.test(c.role || ''); }).map(function (c) { return first(c.name); });
+      out.push({ text: w.replace(UNNAMED, '') + ' not booked yet, so nobody\'s bringing: ' + l.slice(0, 3).join(', ') + (l.length > 3 ? '…' : '') + '. ' + (booker.length ? booker.join(' or ') : 'Production') + ' to book one?', auto: 'unnamed' });
+    });
     var unc = S.items.filter(function (i) { return !i.confirmed; });
     if (unc.length) out.push({ text: unc.length + ' item' + (unc.length > 1 ? 's' : '') + ' not confirmed yet', auto: 'unconfirmed' });
     var counts = {};
@@ -420,10 +427,16 @@
     if (cur && list.indexOf(cur) < 0) list.splice(1, 0, cur);
     return list.map(function (s) { return '<option' + (s === cur ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '<option value="__other">Other…</option>';
   }
+  // Roles that can be picked before anyone's booked: "Grip (not named yet)". They raise a flag until a name goes in.
+  var OPEN_ROLES = ['Grip', 'Gaffer', 'Spark', '1st AC', '2nd AC', 'DIT', 'Steadicam op', 'Playback', 'Production', 'Art dept'];
+  var UNNAMED = ' (not named yet)';
+  function isUnnamed(n) { return String(n || '').indexOf(UNNAMED) > 0; }
   function crewOptions(cur) {
     var names = S.crew.map(function (c) { return c.name; }).concat(['Elliot']);
-    if (cur && names.indexOf(cur) < 0) names.unshift(cur);
-    return names.map(function (n) { return '<option' + (same(n, cur) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('');
+    var roles = OPEN_ROLES.map(function (r) { return r + UNNAMED; });
+    if (cur && names.indexOf(cur) < 0 && roles.indexOf(cur) < 0) names.unshift(cur);
+    function opt(n) { return '<option' + (same(n, cur) ? ' selected' : '') + '>' + esc(n) + '</option>'; }
+    return names.map(opt).join('') + '<optgroup label="Not booked yet">' + roles.map(opt).join('') + '</optgroup>';
   }
 
   function itemEditor(i) {
