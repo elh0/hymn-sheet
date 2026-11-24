@@ -176,3 +176,8 @@ textarea:focus { outline: none; }
 .since li { padding: 2px 0; font-size: 15px; }
 .since .row { margin-top: 6px; }
 .log li.new { box-shadow: inset 3px 0 0 var(--blue); padding-left: 8px; }
+
+/* job switcher (one link per person) */
+.jobs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.jobs button { padding: 2px 9px; border-radius: 4px; font-size: 14px; color: var(--grey); border: 1px solid var(--faint); }
+.jobs button.on { color: var(--ink); border-color: var(--ink); }

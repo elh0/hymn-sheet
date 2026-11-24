@@ -18,16 +18,23 @@
  * Tab 'jobs' (admin only, this job), 'crew' (admin adds; crew may set only
  * their own row with id '@me'), 'log' and 'seen' are written only here.
  * Any other tab is created on first use, and new columns are added as needed.
+ *
+ * People (pipe-2): one link per person for good. Tab 'people' (key, name,
+ * email, admin). A crew row's 'person' column holds that person's key, so one
+ * key opens every job they're on; 'admin' = yes opens every job as Elliot.
+ * Pass job = the job to open (else the soonest by jobs.start, YYYY-MM-DD).
+ * Only admins see or write 'people'. Old per-job keys keep working.
  */
 
-var VERSION = 'pipe-1';
+var VERSION = 'pipe-2';
 var TZ = 'Europe/London';
 var ONLINE_MS = 2 * 60 * 1000;
 var BASE = {
   jobs:  ['job', 'title', 'dates', 'call', 'location', 'prep', 'deck', 'admin_key', 'notes', 'dp_notes'],
   crew:  ['job', 'key', 'name', 'role', 'dept', 'email', 'phone', 'kit_done', 'added'],
   log:   ['time', 'job', 'who', 'what'],
-  seen:  ['job', 'key', 'name', 'first', 'last', 'opens']
+  seen:  ['job', 'key', 'name', 'first', 'last', 'opens'],
+  people: ['key', 'name', 'email', 'admin']
 };
 var NO_WRITE = ['log', 'seen'];
 var LOCKED_COLS = ['job', 'key', 'admin_key', 'id'];
@@ -122,28 +129,53 @@ function setCells(name, rowNum, obj) {
 function fmt(d) { return Utilities.formatDate(d || new Date(), TZ, 'd MMM HH:mm'); }
 function newId() { return Utilities.getUuid().replace(/-/g, '').slice(0, 8); }
 function newKey() { return Utilities.getUuid().replace(/-/g, '').slice(0, 12); }
+function slug(s) { return String(s || 'crew').toLowerCase().split(' ')[0].replace(/[^a-z0-9]/g, '').slice(0, 20) || 'crew'; }
 function clean(s, n) { return String(s === undefined || s === null ? '' : s).trim().slice(0, n || 2000); }
 // A leading apostrophe keeps "26 Nov" and "+44..." as text. Sheets hides it.
 function asText(v) { return typeof v === 'string' && v !== '' ? "'" + v : v; }
 
 /* ---------- who is this ---------- */
 
-function whoIs(key) {
+function whoIs(key, want) {
   key = String(key || '').trim();
   if (!key) return null;
   var jobs = rows('jobs');
   for (var i = 0; i < jobs.length; i++) {
-    if (jobs[i].admin_key && jobs[i].admin_key === key) return { job: jobs[i], name: 'Elliot', role: 'DP', admin: true, key: key };
+    if (jobs[i].admin_key && jobs[i].admin_key === key) return withJobs({ job: jobs[i], name: 'Elliot', role: 'DP', admin: true, key: key }, [jobs[i]]);
   }
   var crew = rows('crew');
   for (var j = 0; j < crew.length; j++) {
     if (crew[j].key === key) {
       var job = jobs.filter(function (x) { return x.job === crew[j].job; })[0];
       if (!job) return null;
-      return { job: job, name: crew[j].name, role: crew[j].role, admin: false, key: key, crewRow: crew[j] };
+      return withJobs({ job: job, name: crew[j].name, role: crew[j].role, admin: false, key: key, crewRow: crew[j] }, [job]);
     }
   }
-  return null;
+  var person = rows('people').filter(function (x) { return x.key && x.key === key; })[0];
+  if (!person) return null;
+  var admin = /^(yes|y|true|1)$/i.test(person.admin || '');
+  var mine = admin ? jobs : jobs.filter(function (jb) {
+    return crew.some(function (c) { return c.job === jb.job && c.person === key; });
+  });
+  if (!mine.length) return null;
+  var pick = mine.filter(function (jb) { return jb.job === want; })[0] || soonest(mine);
+  if (admin) return withJobs({ job: pick, name: person.name || 'Elliot', role: 'DP', admin: true, key: pick.admin_key, person: key }, mine);
+  var cr = crew.filter(function (c) { return c.job === pick.job && c.person === key; })[0];
+  return withJobs({ job: pick, name: cr.name, role: cr.role, admin: false, key: cr.key, crewRow: cr, person: key }, mine);
+}
+
+function withJobs(me, list) {
+  me.jobs = list.map(function (jb) { return { job: jb.job, title: jb.title, dates: jb.dates, start: jb.start || '' }; });
+  return me;
+}
+
+// The next job to come (by jobs.start, YYYY-MM-DD), else the latest one.
+function soonest(list) {
+  var today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  var dated = list.filter(function (jb) { return /^\d{4}-\d\d-\d\d/.test(jb.start || ''); })
+    .sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+  var next = dated.filter(function (jb) { return jb.start >= today; })[0];
+  return next || dated[dated.length - 1] || list[list.length - 1];
 }
 
 /* ---------- presence (cache, so polling costs no sheet writes) ---------- */
@@ -183,18 +215,20 @@ function state(me, live) {
       var o = strip(c); delete o.key;
       o.first = s.first || ''; o.last = t ? fmt(new Date(t)) : (s.last || '');
       o.online = !!(t && Date.now() - t < ONLINE_MS); o.opens = s.opens || '';
-      if (me.admin) o.key = c.key;
+      if (me.admin) o.key = c.key; else delete o.person;
       return o;
     }),
+    jobs: me.jobs || [],
     elliotOnline: !!(live[me.job.admin_key] && Date.now() - live[me.job.admin_key] < ONLINE_MS),
     now: fmt()
   };
   tabNames().forEach(function (name) {
-    if (name === 'jobs' || name === 'crew' || name === 'seen' || out[name] !== undefined) return;
+    if (name === 'jobs' || name === 'crew' || name === 'seen' || name === 'people' || out[name] !== undefined) return;
     if (headOf(sheet(name)).indexOf('job') < 0) return;
     var list = rows(name).filter(mine).map(strip);
     out[name] = name === 'log' ? list.slice(-80).reverse() : list;
   });
+  if (me.admin) out.people = rows('people').map(function (r) { var o = strip(r); return o; });
   ['items', 'tasks', 'shots', 'flags', 'log'].forEach(function (n) { if (!out[n]) out[n] = []; });
   return out;
 }
@@ -202,7 +236,7 @@ function state(me, live) {
 /* ---------- ops ---------- */
 
 function handle(p) {
-  var me = whoIs(p.k);
+  var me = whoIs(p.k, p.job);
   if (!me) return { error: 'This link isn\'t on any job. Ask Elliot for your link.' };
   var a = p.a || 'state';
   if (a === 'state') return state(me, touch(me));
@@ -218,7 +252,7 @@ function handle(p) {
   } finally {
     lock.releaseLock();
   }
-  me = whoIs(p.k) || me;
+  me = whoIs(p.k, p.job) || me;
   return state(me, touch(me));
 }
 
@@ -237,6 +271,25 @@ function run(op, me) {
   if (!/^[a-z][a-z0-9_]{0,30}$/.test(tab)) return { error: 'Unknown list.' };
   if (NO_WRITE.indexOf(tab) >= 0) return { error: 'That list is read-only.' };
   var said = clean(op.log, 400);
+
+  if (tab === 'people') {
+    if (!me.admin) return { error: 'Only Elliot manages links.' };
+    var ppl = rows('people');
+    if (a === 'add') {
+      var pr = fields(op.row, me, {});
+      var pk = clean(op.row && op.row.key, 40);
+      if (!/^[a-z0-9]+-[a-z0-9]{8}$/.test(pk) || ppl.some(function (x) { return x.key === pk; })) pk = slug(pr.name) + '-' + newKey().slice(0, 8);
+      pr.key = pk; delete pr.admin;
+      append('people', pr);
+    } else if (a === 'set') {
+      var hp = ppl.filter(function (x) { return x.key === op.id; })[0];
+      if (!hp) return { error: 'No such person.' };
+      var pch = fields(op.fields, me, hp); delete pch.admin;
+      if (Object.keys(pch).length) setCells('people', hp._row, pch); else said = '';
+    } else return { error: 'People are removed in the Sheet.' };
+    if (said) append('log', { time: fmt(), job: j, who: me.name, what: said });
+    return null;
+  }
 
   if (tab === 'jobs') {
     if (!me.admin) return { error: 'Only Elliot edits the job.' };
@@ -257,6 +310,7 @@ function run(op, me) {
       })[0];
       if (!cr) return { error: 'Only Elliot changes other people\'s details.' };
       var cch = fields(op.fields, me, cr);
+      if (!me.admin) delete cch.person;
       if (Object.keys(cch).length) setCells('crew', cr._row, cch); else said = '';
     } else return { error: 'Only Elliot removes crew, in the Sheet.' };
   } else {

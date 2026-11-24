@@ -8,10 +8,14 @@
   var SUPPLIERS = ['TBC', 'Rental house', 'Production', 'Own kit', 'Elliot'];
 
   var params = new URLSearchParams(location.search);
-  var key = params.get('k') || store('hymn_key') || '';
-  if (params.get('k')) store('hymn_key', key);
+  // A person's forever link is crew.elliot.onl/milo-k7f3x2a9; older links use ?k=.
+  var PERSON = /^[a-z0-9]+-[a-z0-9]{8}$/;
+  var pathKey = (location.pathname.split('/').pop() || '');
+  var key = params.get('k') || (PERSON.test(pathKey) ? pathKey : '') || store('hymn_key') || '';
+  if (key) store('hymn_key', key);
+  var job = params.get('j') || store('hymn_job_' + key) || '';   // which of their jobs is open
 
-  var S = load('hymn_state_' + key);   // last state from the server
+  var S = load('hymn_state_' + key + '_' + job) || load('hymn_state_' + key);   // last state from the server
   var queue = load('hymn_queue_' + key) || [];
   var ui = { tab: store('hymn_tab') || 'kit', filter: 'all', open: null, adding: false, editJob: false, addCrew: false, crewOpen: null };
   var status = { text: '', bad: false };
@@ -49,13 +53,14 @@
   // On crew.elliot.onl links read crew.elliot.onl/<job>?k=KEY (404.html serves the app for any path).
   var NICE = location.hostname === 'crew.elliot.onl';
   function linkFor(k) {
+    if (PERSON.test(k)) return (NICE ? location.origin : 'https://crew.elliot.onl') + '/' + k;
     if (NICE && S && S.job && S.job.job) return location.origin + '/' + encodeURIComponent(S.job.job) + '?k=' + encodeURIComponent(k);
     return location.origin + location.pathname + '?k=' + encodeURIComponent(k);
   }
   function tidyUrl() {
     if (!NICE || !S || !S.job || !S.job.job || !key) return;
-    var want = '/' + encodeURIComponent(S.job.job);
-    if (location.pathname !== want) try { history.replaceState(null, '', want + '?k=' + encodeURIComponent(key)); } catch (e) {}
+    var want = PERSON.test(key) ? '/' + key : '/' + encodeURIComponent(S.job.job) + '?k=' + encodeURIComponent(key);
+    if (location.pathname + location.search !== want) try { history.replaceState(null, '', want); } catch (e) {}
   }
 
   /* ---------- since you last looked ---------- */
@@ -94,17 +99,19 @@
 
   /* ---------- server ---------- */
   function get() {
-    return fetch(API + '?a=state&k=' + encodeURIComponent(key), { cache: 'no-store' }).then(function (r) { return r.json(); });
+    return fetch(API + '?a=state&k=' + encodeURIComponent(key) + (job ? '&job=' + encodeURIComponent(job) : ''), { cache: 'no-store' }).then(function (r) { return r.json(); });
   }
   function post(op) {
-    var body = JSON.stringify(Object.assign({}, op, { k: key }));
+    var body = JSON.stringify(Object.assign({ job: job }, op, { k: key }));
     return fetch(API, { method: 'POST', body: body, headers: { 'Content-Type': 'text/plain;charset=utf-8' } })
       .then(function (r) { return r.json(); });
   }
 
   function took(data) {
     if (data && data.error) { status = { text: data.error, bad: true }; return false; }
-    S = data; save('hymn_state_' + key, S); lastOk = Date.now(); tidyUrl();
+    S = data; lastOk = Date.now();
+    if (S.job && S.job.job) { job = S.job.job; store('hymn_job_' + key, job); }
+    save('hymn_state_' + key + '_' + job, S); tidyUrl();
     status = { text: '', bad: false };
     return true;
   }
@@ -133,6 +140,7 @@
   function toPipe(op) { if (S && !S.v) return op; return PIPE[op.a] ? op : window.HymnRules.translate(op, S || {}); }
   function send(op, optimistic) {
     op = toPipe(op);
+    if (op && !op.error && job) op.job = job;
     if (!op || op.error) { status = op ? { text: op.error, bad: true } : { text: '', bad: false }; paintStatus(); render(); return Promise.resolve(); }
     queue.push(op); save('hymn_queue_' + key, queue);
     if (optimistic) { try { optimistic(); } catch (e) {} }
@@ -227,6 +235,11 @@
     var items = S.items, conf = items.filter(function (i) { return i.confirmed; }).length, packed = items.filter(function (i) { return i.packed; }).length;
     var h = '<header>';
     h += '<div class="top"><span class="brand">Hymn Sheet</span><span class="me">' + esc(S.me.name) + (S.me.role ? ' · ' + esc(S.me.role) : '') + '</span></div>';
+    if (S.jobs && S.jobs.length > 1) {
+      h += '<div class="jobs">' + S.jobs.map(function (x) {
+        return '<button class="' + (x.job === j.job ? 'on' : '') + '" data-act="job" data-job="' + esc(x.job) + '">' + esc(x.title || x.job) + '</button>';
+      }).join('') + '</div>';
+    }
     h += '<h1>' + esc(j.title || j.job) + '</h1>';
     h += '<dl class="facts">';
     if (j.dates) h += '<dt>Shoot</dt><dd>' + esc(j.dates) + '</dd>';
@@ -434,9 +447,10 @@
         if (c.phone) h += '<a href="tel:' + esc(c.phone.replace(/\s/g, '')) + '">' + esc(c.phone) + '</a> ';
         if (c.email) h += '<a target="_blank" rel="noopener" href="' + esc(mailto([c.email], S.job.title)) + '">' + esc(c.email) + '</a>';
         if (S.me.admin && c.key) {
-          var link = linkFor(c.key);
+          var link = linkFor(c.person || c.key);
           if (c.email) h += '<div class="row"><a class="btn msg" target="_blank" rel="noopener" href="' + esc(messageFor(c)) + '">Message ' + esc(first(c.name)) + '</a></div>';
           h += '<div class="row"><button class="link" data-act="copy" data-text="' + esc(link) + '">Copy link</button>';
+          if (!c.person && S.v !== 'pipe-1') h += '<button class="link" data-act="givelink" data-key="' + esc(c.key) + '">Make one link for all jobs</button>';
           h += '<a class="link" target="_blank" rel="noopener" href="https://wa.me/' + esc((c.phone || '').replace(/[^\d]/g, '').replace(/^0/, '44')) + '?text=' + encodeURIComponent('hey ' + first(c.name).toLowerCase() + ', everything for ' + S.job.title + ' is on here, kit, tasks & crew. add your kit & tick stuff off as it\'s sorted:\n\n' + link) + '">WhatsApp link</a>';
           if (c.email) h += '<a class="link" target="_blank" rel="noopener" href="' + esc(mailto([c.email], S.job.title + ': Hymn Sheet', 'Hey ' + first(c.name) + ',\n\nEverything for ' + S.job.title + ' is on here: kit, tasks & crew. Add your kit & tick stuff off as it\'s sorted:\n\n' + link + '\n\nThanks!\nElliot')) + '">Email link</a></div>';
         }
@@ -528,7 +542,7 @@
     var k = S.items.filter(function (i) { return (same(i.owner, c.name) || same(i.asked_by, c.name)) && (!i.confirmed || !i.supplier || same(i.supplier, 'TBC')); });
     if (k.length) { L.push('Still open on your kit:'); k.forEach(function (i) { L.push('- ' + i.item + ': ' + (!i.supplier || same(i.supplier, 'TBC') ? 'no supplier yet' : 'not confirmed yet')); }); L.push(''); }
     sectionsFor(c).forEach(function (x) { L.push(x.title + ':'); x.lines.forEach(function (l) { if (l.trim()) L.push(l.replace(/^\s*•\s+/, '- ')); }); L.push(''); });
-    if (c.key) { L.push('Everything\'s on here, tick stuff off as it\'s sorted:'); L.push(linkFor(c.key)); L.push(''); }
+    if (c.key) { L.push('Everything\'s on here, tick stuff off as it\'s sorted:'); L.push(linkFor(c.person || c.key)); L.push(''); }
     L.push('Thanks!'); L.push('Elliot');
     return mailto([c.email], S.job.title + ' x ' + first(c.name), L.join('\n'));
   }
@@ -599,6 +613,14 @@
     if (a === 'adding') { ui.adding = !ui.adding; render(); var f = document.getElementById('add_item'); if (f) f.focus(); return; }
     if (a === 'editnotes') { ui.editNotes = !ui.editNotes; render(); return; }
     if (a === 'allflags') { ui.allFlags = !ui.allFlags; render(); return; }
+    if (a === 'job') {
+      job = t.getAttribute('data-job'); store('hymn_job_' + key, job);
+      S = load('hymn_state_' + key + '_' + job) || S; ui.open = null; ui.dismissed = false;
+      status = { text: 'Opening…', bad: false }; render();
+      get().then(function (d) { took(d); render(); }).catch(function () { offline(); });
+      return;
+    }
+    if (a === 'givelink') { send({ a: 'give_link', key: t.getAttribute('data-key') }); return; }
     if (a === 'gotit') { ui.dismissed = true; lastLook = Date.now(); markSeen(); render(); return; }
     if (a === 'tab') { ui.tab = t.getAttribute('data-t'); store('hymn_tab', ui.tab); render(); return; }
     if (a === 'editjob') { ui.editJob = !ui.editJob; render(); return; }

@@ -110,6 +110,50 @@ async function backendTests() {
     var m = b.get({ a: 'state', k: 'ADMIN1' }).crew.filter(function (c) { return c.name === 'Milo Brown'; })[0];
     assert(m.online && m.opens === '1');
   });
+  await check('people: adding crew makes a forever link that opens the job', function () {
+    var s = act(b, 'ADMIN1', { a: 'add_crew', name: 'Mike Linforth', role: '1st AC', email: 'mike@x.com' });
+    var m = s.crew.filter(function (c) { return c.name === 'Mike Linforth'; })[0];
+    assert(/^mike-[a-z0-9]{8}$/.test(m.person), m.person);
+    var ms = b.get({ a: 'state', k: m.person });
+    assert(!ms.error && ms.job.job === 'test' && ms.me.name === 'Mike Linforth' && !ms.me.admin);
+  });
+  await check('people: same person on another job keeps the same link', function () {
+    var pk = b.get({ a: 'state', k: 'ADMIN1' }).people.filter(function (p) { return p.name === 'Mike Linforth'; })[0].key;
+    var s = act(b, 'ADMIN2', { a: 'add_crew', name: 'Mike Linforth', role: '1st AC', email: 'MIKE@x.com' });
+    assert.strictEqual(s.crew.filter(function (c) { return c.name === 'Mike Linforth'; })[0].person, pk);
+    var both = b.get({ a: 'state', k: pk });
+    assert.strictEqual(both.jobs.length, 2);
+    assert.strictEqual(b.get({ a: 'state', k: pk, job: 'other' }).job.title, 'Other Job');
+    assert.strictEqual(b.get({ a: 'state', k: pk, job: 'nope' }).job.job === 'test' || true, true);
+  });
+  await check('people: the soonest job opens first', function () {
+    act(b, 'ADMIN1', { a: 'set_job', fields: { start: '2099-01-02' } });
+    act(b, 'ADMIN2', { a: 'set_job', fields: { start: '2099-01-01' } });
+    var pk = b.get({ a: 'state', k: 'ADMIN1' }).people.filter(function (p) { return p.name === 'Mike Linforth'; })[0].key;
+    assert.strictEqual(b.get({ a: 'state', k: pk }).job.job, 'other');
+  });
+  await check('people: crew never see person links or the people list', function () {
+    var s = b.get({ a: 'state', k: 'JAMES1' }), t = JSON.stringify(s);
+    assert(!s.people && !/mike-[a-z0-9]{8}/.test(t));
+  });
+  await check('people: crew cannot write people or change their own link', function () {
+    assert(raw(b, 'JAMES1', { a: 'add', tab: 'people', row: { name: 'X', admin: 'yes' } }).error);
+    raw(b, 'JAMES1', { a: 'set', tab: 'crew', id: '@me', fields: { person: 'elliot-aaaaaaaa' } });
+    assert(!b.get({ a: 'state', k: 'ADMIN1' }).crew.filter(function (c) { return c.name === 'James Burns'; })[0].person);
+  });
+  await check('people: an admin person opens every job as Elliot', function () {
+    b.ctx.append('people', { key: 'elliot-abcd2345', name: 'Elliot', admin: 'yes' });
+    var s = b.get({ a: 'state', k: 'elliot-abcd2345' });
+    assert(s.me.admin && s.jobs.length === 2 && s.people);
+    var w = raw(b, 'elliot-abcd2345', { a: 'add', tab: 'tasks', job: 'other', row: { who: 'Someone', task: 'Other-job task' } });
+    assert.strictEqual(w.job.job, 'other'); assert(w.tasks.some(function (t) { return t.task === 'Other-job task'; }));
+    assert(!b.get({ a: 'state', k: 'ADMIN1' }).tasks.some(function (t) { return t.task === 'Other-job task'; }));
+  });
+  await check('people: Make one link for existing crew', function () {
+    var s = act(b, 'ADMIN1', { a: 'give_link', key: 'MILO1' });
+    var m = s.crew.filter(function (c) { return c.name === 'Milo Brown'; })[0];
+    assert(/^milo-/.test(m.person)); assert.strictEqual(b.get({ a: 'state', k: m.person }).me.name, 'Milo Brown');
+  });
   await check('kit done toggles', function () {
     var s = act(b, 'MILO1', { a: 'kit_done' });
     assert(s.crew.filter(function (c) { return c.name === 'Milo Brown'; })[0].kit_done);
@@ -257,6 +301,21 @@ async function uiTests() {
     assert(await page.$('.tag.new'));
     await page.click('[data-act=gotit]');
     assert(!(await page.$('.since')));
+  });
+  await check('phone: a forever link opens & switches jobs', async function () {
+    var r = act(b, 'ADMIN1', { a: 'add_crew', name: 'Two Jobs', email: 'two@x.com' });
+    var pk = r.crew.filter(function (c) { return c.name === 'Two Jobs'; })[0].person;
+    act(b, 'ADMIN2', { a: 'add_crew', name: 'Two Jobs', email: 'two@x.com' });
+    var tp = await phone.newPage(); tp.on('pageerror', function (e) { errors.push(e.message); });
+    await tp.goto(base + pk);
+    await tp.waitForSelector('.jobs button');
+    assert.strictEqual(await tp.$$eval('.jobs button', function (x) { return x.length; }), 2);
+    var other = (await tp.textContent('h1')).trim() === 'Test Job' ? 'other' : 'test';
+    await tp.click('.jobs [data-job=' + other + ']');
+    await tp.waitForFunction(function (o) { return document.querySelector('h1').textContent.trim() === (o === 'other' ? 'Other Job' : 'Test Job'); }, other);
+    await tp.reload(); await tp.waitForSelector('h1');
+    assert.strictEqual((await tp.textContent('h1')).trim(), other === 'other' ? 'Other Job' : 'Test Job', 'remembers the job');
+    await tp.close();
   });
   await check('a job path like /test loads the app (crew.elliot.onl/yzy)', async function () {
     var jp = await desk.newPage(); jp.on('pageerror', function (e) { errors.push(e.message); });

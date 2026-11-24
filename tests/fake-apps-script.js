@@ -31,7 +31,7 @@ function makeBackend(seed) {
     LockService: { getScriptLock: function () { return { waitLock: function () {}, releaseLock: function () {} }; } },
     Utilities: {
       getUuid: function () { return crypto.randomUUID(); },
-      formatDate: function (d) { var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return d.getDate() + ' ' + m[d.getMonth()] + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+      formatDate: function (d, tz, f) { if (f === 'yyyy-MM-dd') return d.toISOString().slice(0, 10); var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return d.getDate() + ' ' + m[d.getMonth()] + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
     },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: function (s) { return { body: s, setMimeType: function () { return this; } }; } },
     JSON: JSON, Date: Date, Object: Object, String: String, Number: Number, Math: Math

@@ -7,7 +7,23 @@
 
   var CREW_ITEM_FIELDS = ['qty', 'supplier', 'owner', 'notes'];
   var ADMIN_ITEM_FIELDS = ['dept', 'item', 'qty', 'supplier', 'owner', 'notes', 'asked_by'];
-  var JOB_FIELDS = ['title', 'dates', 'call', 'location', 'prep', 'deck', 'notes', 'dp_notes'];
+  var JOB_FIELDS = ['title', 'dates', 'start', 'call', 'location', 'prep', 'deck', 'notes', 'dp_notes'];
+
+  // Forever links: crew.elliot.onl/milo-k7f3x2a9 (first name + 8 random letters/digits).
+  function personKey(name) {
+    var abc = 'abcdefghijkmnpqrstuvwxyz23456789', out = '', r = [];
+    try { var a = new Uint8Array(8); (root.crypto || require('crypto').webcrypto).getRandomValues(a); r = Array.prototype.slice.call(a); }
+    catch (e) { for (var i = 0; i < 8; i++) r.push(Math.floor(Math.random() * 256)); }
+    r.forEach(function (n) { out += abc.charAt(n % abc.length); });
+    var first = String(name || 'crew').toLowerCase().split(' ')[0].replace(/[^a-z0-9]/g, '').slice(0, 20) || 'crew';
+    return first + '-' + out;
+  }
+  // The same person on another job: same email, or same full name.
+  function findPerson(S, name, email) {
+    return (S.people || []).filter(function (p) {
+      return (email && p.email && same(p.email, email)) || (name && p.name && same(p.name, name));
+    })[0];
+  }
 
   function same(a, b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); }
   function clean(s, n) { return String(s === undefined || s === null ? '' : s).trim().slice(0, n || 300); }
@@ -105,9 +121,30 @@
     if (a === 'add_crew') {
       if (!admin) return { error: 'Only Elliot adds crew.' };
       if (!clean(op.name)) return { error: 'Name needed.' };
-      return { a: 'add', tab: 'crew', log: 'added ' + clean(op.name, 60) + ' (' + clean(op.role, 60) + ')', row: {
-        name: clean(op.name, 60), role: clean(op.role, 60), dept: clean(op.dept, 40),
-        email: clean(op.email, 120), phone: clean(op.phone, 40), kit_done: '', added: '@now' } };
+      var row = { name: clean(op.name, 60), role: clean(op.role, 60), dept: clean(op.dept, 40),
+        email: clean(op.email, 120), phone: clean(op.phone, 40), kit_done: '', added: '@now' };
+      var said = 'added ' + row.name + ' (' + row.role + ')';
+      if (S.v === 'pipe-1') return { a: 'add', tab: 'crew', row: row, log: said };   // script not updated yet
+      var known = findPerson(S, row.name, row.email);
+      if (known) { row.person = known.key; return { a: 'add', tab: 'crew', row: row, log: said }; }
+      row.person = personKey(row.name);
+      return { a: 'batch', ops: [
+        { a: 'add', tab: 'people', row: { key: row.person, name: row.name, email: row.email } },
+        { a: 'add', tab: 'crew', row: row, log: said }] };
+    }
+
+    if (a === 'give_link') {
+      if (!admin) return { error: 'Only Elliot makes links.' };
+      if (S.v === 'pipe-1') return { error: 'Paste the new script first.' };
+      var cw = (S.crew || []).filter(function (x) { return x.key === op.key; })[0];
+      if (!cw) return { error: 'They\'ve gone. Pull to refresh.' };
+      if (cw.person) return null;
+      var kn = findPerson(S, cw.name, cw.email);
+      if (kn) return { a: 'set', tab: 'crew', id: cw.key, fields: { person: kn.key }, log: 'one link for ' + cw.name };
+      var pk = personKey(cw.name);
+      return { a: 'batch', ops: [
+        { a: 'add', tab: 'people', row: { key: pk, name: cw.name, email: cw.email } },
+        { a: 'set', tab: 'crew', id: cw.key, fields: { person: pk }, log: 'one link for ' + cw.name }] };
     }
 
     if (a === 'set_job') {
