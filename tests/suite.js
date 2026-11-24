@@ -89,6 +89,24 @@ async function backendTests() {
   });
   await check('crew can tick someone else\'s task', function () { var r = act(b, 'JAMES1', { a: 'tick_task', id: 't2' }); assert(!r.error, r.error); act(b, 'JAMES1', { a: 'tick_task', id: 't2' }); });
   await check('crew can give someone a task', function () { var r = act(b, 'JAMES1', { a: 'add_task', who: 'Milo', task: 'Check batteries' }); assert(!r.error, r.error); });
+  await check('crew ask Elliot a question (new asks tab)', function () {
+    var r = act(b, 'JAMES1', { a: 'ask', to: 'Elliot', text: 'Rialto on the quote?', about: 'Sony Venice' }); assert(!r.error, r.error);
+    var q = r.asks[0]; assert.strictEqual(q.from, 'James Burns'); assert.strictEqual(q.to, 'Elliot'); assert(!q.answer);
+  });
+  await check('only the person asked (or Elliot) answers', function () {
+    var id = b.get({ a: 'state', k: 'ADMIN1' }).asks[0].id;
+    assert(act(b, 'MILO1', { a: 'answer', id: id, text: 'no idea' }).error);
+    var r = act(b, 'ADMIN1', { a: 'answer', id: id, text: 'Yes, confirmed' }); assert(!r.error, r.error);
+    assert.strictEqual(r.asks[0].answer, 'Yes, confirmed'); assert(r.log.some(function (l) { return /answered James Burns/.test(l.what); }));
+  });
+  await check('ask Everyone: anyone answers; only asker or Elliot removes', function () {
+    var r = act(b, 'MILO1', { a: 'ask', to: 'Everyone', text: 'Who has the spare V-locks?' });
+    var id = r.asks[1].id;
+    assert(!act(b, 'DAVO1', { a: 'answer', id: id, text: 'Me' }).error);
+    assert(act(b, 'DAVO1', { a: 'delete_ask', id: id }).error);
+    assert(!act(b, 'MILO1', { a: 'delete_ask', id: id }).error);
+    assert(act(b, 'MILO1', { a: 'ask', to: 'Milo Brown', text: 'x' }).error);
+  });
   await check('crew tick their own task', function () { assert(act(b, 'JAMES1', { a: 'tick_task', id: 't1' }).tasks[0].done); });
   await check('every change goes in the log', function () {
     var s = b.get({ a: 'state', k: 'ADMIN1' });
@@ -197,6 +215,26 @@ async function uiTests() {
     await page.waitForFunction(function () { return document.body.textContent.includes('Vaxis TX + 3 RX') && !document.getElementById('status').classList.contains('show'); });
     assert(b.get({ a: 'state', k: 'ADMIN1' }).items.some(function (i) { return i.item === 'Vaxis TX + 3 RX' && i.asked_by === 'James Burns'; }));
   });
+  await check('phone: question for you pinned on top, reply in app', async function () {
+    act(b, 'ADMIN1', { a: 'ask', to: 'James Burns', text: 'Can you grab the spare cage?' });
+    await page.reload(); await page.waitForSelector('.asks');
+    assert(/Can you grab the spare cage/.test(await page.textContent('.asks')));
+    var id = await page.getAttribute('.asks form.reply', 'data-id');
+    await page.fill('#ans_' + id, 'On it');
+    await page.click('.asks form.reply button');
+    await page.waitForFunction(function () { return !document.querySelector('.asks form.reply') && !document.getElementById('status').classList.contains('show'); });
+    assert(b.get({ a: 'state', k: 'ADMIN1' }).asks.some(function (q) { return q.answer === 'On it' && q.answered_by === 'James Burns'; }));
+  });
+  await check('phone: Ask about this on a kit item', async function () {
+    await page.click('[data-tab=kit]'); await page.click('[data-act=openitem][data-id=i2]');
+    await page.click('[data-act=askitem][data-id=i2]');
+    await page.waitForSelector('#askform');
+    assert(/About: NDs/.test(await page.textContent('#askform')));
+    await page.fill('#ask_text', 'Which strengths?');
+    await page.click('form[data-form=ask] button[type=submit]');
+    await page.waitForFunction(function () { return !document.getElementById('status').classList.contains('show'); });
+    assert(b.get({ a: 'state', k: 'ADMIN1' }).asks.some(function (q) { return q.about === 'NDs' && q.to === 'Elliot' && q.from === 'James Burns'; }));
+  });
   await check('phone: "I\'ve added all my kit"', async function () {
     await page.click('[data-act=kitdone]');
     await page.waitForFunction(function () { return /all on the sheet/.test(document.body.textContent); });
@@ -258,10 +296,10 @@ async function uiTests() {
     var href = decodeURIComponent(await page.getAttribute('a.update', 'href'));
     assert(/^mailto:dp@x\.com,l@x\.com/.test(href) && /Hey Elliot & Louis/.test(href) && /Vaxis TX \+ 3 RX/.test(href), href);
   });
-  await check('phone: Ask about this goes to the supplier contact & production', async function () {
+  await check('phone: Email supplier goes to the supplier contact & production', async function () {
     await page.click('[data-tab=kit]');
     await page.click('[data-act=openitem][data-id=i1]');
-    var href = decodeURIComponent(await page.getAttribute('a.ask', 'href'));
+    var href = decodeURIComponent(await page.getAttribute('a.email-sup', 'href'));
     assert(/^mailto:a@x\.com,l@x\.com,dp@x\.com/.test(href) && /Hey Aduke & Louis/.test(href) && /confirm the Sony Venice 8\.6K w\/ Rialto from MCX/.test(href), href);
     await page.click('[data-act=openitem][data-id=i1]');
   });
@@ -297,7 +335,8 @@ async function uiTests() {
     await page.waitForSelector('.since');
     var t = await page.textContent('.since');
     assert(/Tiffen Black Pro-Mist/.test(t) && /Elliot/.test(t), t);
-    assert(!/James/.test(t), 'own changes are left out');
+    var who = await page.$$eval('.since li > span:first-child', function (l) { return l.map(function (x) { return x.textContent; }); });
+    assert(who.indexOf('James') < 0, 'own changes are left out');
     assert(await page.$('.tag.new'));
     await page.click('[data-act=gotit]');
     assert(!(await page.$('.since')));

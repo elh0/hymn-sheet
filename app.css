@@ -185,3 +185,14 @@ textarea:focus { outline: none; }
 /* Elliot's links list */
 .links li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--faint); font-size: 15px; }
 .links .row { margin: 0; flex-wrap: nowrap; }
+
+/* questions */
+.asks { background: var(--tag-yellow); border-radius: 4px; padding: 12px 16px 8px; margin-bottom: 14px; }
+.asks h2 { font-size: 16px; margin-bottom: 4px; }
+.ask-q { list-style: none; padding: 6px 0; border-bottom: 1px solid var(--faint); }
+.ask-q:last-child { border-bottom: 0; }
+.ask-q .answer { margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--green); }
+.ask-q .link { margin-top: 4px; }
+.reply { display: flex; gap: 8px; margin-top: 6px; }
+.reply input { flex: 1; min-width: 0; }
+.reply button { flex: none; padding: 4px 10px; border-radius: 4px; background: var(--ink); color: var(--bg); font-size: 14px; }

@@ -118,6 +118,32 @@
       return { a: 'set', tab: 'flags', id: fl.id, fields: { status: reopen ? 'open' : 'sorted' }, log: (reopen ? 'reopened: ' : 'sorted: ') + fl.text };
     }
 
+    // Questions inside the app: anyone asks anyone, the person asked (or Elliot) answers.
+    if (a === 'ask') {
+      var q = clean(op.text, 500), to = clean(op.to, 60) || 'Elliot';
+      if (!q) return { error: 'Type the question.' };
+      if (same(to, me.name)) return { error: 'Pick someone else to ask.' };
+      var about = clean(op.about, 200);
+      return { a: 'add', tab: 'asks', log: 'asked ' + to + (about ? ' about ' + about : '') + ': ' + q,
+        row: { to: to, from: '@me', about: about, text: q, answer: '', answered_by: '', asked: '@now', answered: '' } };
+    }
+
+    if (a === 'answer') {
+      var qa = find(S.asks, op.id), ans = clean(op.text, 500);
+      if (!qa) return { error: 'That question has gone. Pull to refresh.' };
+      if (!ans) return { error: 'Type your answer.' };
+      if (!admin && !same(qa.to, me.name) && !same(qa.to, 'Everyone')) return { error: 'That one\'s for ' + qa.to + '.' };
+      return { a: 'set', tab: 'asks', id: qa.id, fields: { answer: ans, answered_by: '@me', answered: '@now' },
+        log: 'answered ' + qa.from + ': ' + ans };
+    }
+
+    if (a === 'delete_ask') {
+      var qd = find(S.asks, op.id);
+      if (!qd) return null;
+      if (!admin && !same(qd.from, me.name)) return { error: 'Only whoever asked can remove it.' };
+      return { a: 'del', tab: 'asks', id: qd.id, log: 'removed question: ' + qd.text };
+    }
+
     if (a === 'add_crew') {
       if (!admin) return { error: 'Only Elliot adds crew.' };
       if (!clean(op.name)) return { error: 'Name needed.' };

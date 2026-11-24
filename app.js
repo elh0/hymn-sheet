@@ -97,6 +97,56 @@
     return h;
   }
 
+  /* ---------- questions ---------- */
+  function asks() { return (S && S.asks) || []; }
+  function forMe(q) { return same(q.to, S.me.name) || (same(q.to, 'Everyone') && !same(q.from, S.me.name)) || (S.me.admin && same(q.to, 'Elliot')); }
+  function fromMe(q) { return same(q.from, S.me.name); }
+  function askSeen() { return load('hymn_asks_' + key) || []; }
+  function openForMe() { return asks().filter(function (q) { return !q.answer && forMe(q); }); }
+  function newAnswers() { var s = askSeen(); return asks().filter(function (q) { return q.answer && fromMe(q) && s.indexOf(q.id) < 0; }); }
+  function askRow(q, reply) {
+    var h = '<li class="ask-q"><div class="name">' + (q.about ? '<span class="grey">' + esc(q.about) + ': </span>' : '') + esc(q.text) + '</div>';
+    h += '<div class="meta">' + esc(first(q.from)) + ' → ' + esc(q.to) + (q.asked ? ' · ' + esc(q.asked) : '') + '</div>';
+    if (q.answer) h += '<div class="answer">' + esc(q.answer) + ' <span class="grey">' + esc(first(q.answered_by)) + (q.answered ? ', ' + esc(q.answered) : '') + '</span></div>';
+    else if (reply) h += '<form class="reply" data-form="answer" data-id="' + esc(q.id) + '"><input name="text" id="ans_' + esc(q.id) + '" data-keep="ans_' + esc(q.id) + '" placeholder="Your answer"><button type="submit">Reply</button></form>';
+    return h + '</li>';
+  }
+  // Pinned at the top of every tab: questions waiting on you, & answers to yours.
+  function asksBlock() {
+    var o = openForMe(), n = newAnswers();
+    if (!o.length && !n.length) return '';
+    var h = '<section class="asks">';
+    if (o.length) h += '<h2>' + (o.length > 1 ? o.length + ' questions' : 'A question') + ' for you</h2><ul>' + o.map(function (q) { return askRow(q, true); }).join('') + '</ul>';
+    if (n.length) {
+      h += '<h2>' + (n.length > 1 ? 'Answers' : 'An answer') + ' to your question' + (n.length > 1 ? 's' : '') + '</h2><ul>' + n.map(function (q) { return askRow(q); }).join('') + '</ul>';
+      h += '<div class="row"><button class="link" data-act="seenanswers">Got it</button></div>';
+    }
+    return h + '</section>';
+  }
+  function askForm() {
+    var h = '<section id="askform"><h2>Ask someone</h2><form class="box" data-form="ask">';
+    h += '<label>Who<select name="to" data-keep="ask_to">' + askOptions() + '</select></label>';
+    if (ui.askAbout) h += '<p class="grey small">About: ' + esc(ui.askAbout) + ' <button type="button" class="link" data-act="askclear">×</button></p>';
+    h += '<label>Question<input name="text" id="ask_text" data-keep="ask_text" placeholder="e.g. Is the Rialto on the quote?"></label>';
+    h += '<div class="row"><button type="submit">Ask</button></div></form><p class="grey small">They\'ll see it at the top when they open their link.</p></section>';
+    return h;
+  }
+  function askOptions() {
+    var names = S.crew.map(function (c) { return c.name; }).concat(S.me.admin ? [] : ['Elliot']).filter(function (n) { return !same(n, S.me.name); }).concat(['Everyone']);
+    var cur = ui.askTo || (S.me.admin ? '' : 'Elliot');
+    return names.map(function (n) { return '<option' + (same(n, cur) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('');
+  }
+  function asksList() {
+    var mine = asks().filter(function (q) { return S.me.admin || forMe(q) || fromMe(q); });
+    if (!mine.length) return '';
+    var open = mine.filter(function (q) { return !q.answer; }), done = mine.filter(function (q) { return q.answer; });
+    var h = '<section><h2>Questions <span class="grey">(' + open.length + ' open)</span></h2><ul>';
+    open.concat(done.reverse()).forEach(function (q) {
+      h += askRow(q, forMe(q) || S.me.admin).replace('</li>', (S.me.admin || fromMe(q) ? '<button class="link grey small" data-act="delask" data-id="' + esc(q.id) + '">Remove</button>' : '') + '</li>');
+    });
+    return h + '</ul></section>';
+  }
+
   /* ---------- server ---------- */
   function get() {
     return fetch(API + '?a=state&k=' + encodeURIComponent(key) + (job ? '&job=' + encodeURIComponent(job) : ''), { cache: 'no-store' }).then(function (r) { return r.json(); });
@@ -229,7 +279,7 @@
 
     var h = '<div class="wrap">' + header() + tabs() + '<main>';
     if (S.loading) h += '<p class="grey gap">Loading…</p>';
-    else if (ui.tab !== 'log') h += sinceBlock();
+    else if (ui.tab !== 'log') h += asksBlock() + sinceBlock();
     if (S.loading) {}
     else if (ui.tab === 'kit') h += kitView();
     else if (ui.tab === 'mine') h += mineView();
@@ -389,7 +439,8 @@
     h += '<label>Notes<input name="notes" id="ed_notes" value="' + esc(i.notes) + '"></label>';
     h += '<p class="grey small">Asked by ' + esc(i.asked_by || '-') + (i.source && i.source !== 'app' ? ' · from ' + esc(i.source) : '') + (i.confirmed ? ' · confirmed ' + esc(i.confirmed) : '') + (i.packed ? ' · packed ' + esc(i.packed) : '') + '</p>';
     h += '<div class="row"><button type="submit">Save</button>';
-    h += '<a class="btn ask" target="_blank" rel="noopener" href="' + esc(askAbout(i)) + '">Ask about this</a>';
+    h += '<button type="button" class="ask" data-act="askitem" data-id="' + esc(i.id) + '">Ask about this</button>';
+    h += '<a class="btn email-sup" target="_blank" rel="noopener" href="' + esc(askAbout(i)) + '">Email supplier</a>';
     h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(mailto(S.crew.map(function (c) { return c.email; }), S.job.title + ': ' + i.item, i.item + (i.qty ? ' x' + i.qty : '') + '\n\n')) + '">Email crew</a>';
     if (S.me.admin || (same(i.asked_by, S.me.name) && !i.confirmed)) h += '<button type="button" class="link red" data-act="delitem" data-id="' + esc(i.id) + '">Remove</button>';
     h += '</div></form></li>';
@@ -426,6 +477,7 @@
       h += '<p class="gap"><button class="wide' + (meRow.kit_done ? ' on' : '') + '" data-act="kitdone">' + (meRow.kit_done ? 'My kit is all on the sheet · ' + esc(meRow.kit_done) : 'I\'ve added all my kit') + '</button></p>';
       h += '<p><a class="btn wide-btn update" target="_blank" rel="noopener" href="' + esc(myUpdate()) + '">Send my update</a></p></section>';
     }
+    h += askForm() + asksList();
     h += taskAdder();
 
     h += '<section><h2>Something wrong?</h2><form class="box" data-form="flag">';
@@ -707,6 +759,10 @@
       return;
     }
     if (a === 'givelink') { send({ a: 'give_link', key: t.getAttribute('data-key') }); return; }
+    if (a === 'seenanswers') { save('hymn_asks_' + key, askSeen().concat(newAnswers().map(function (q) { return q.id; })).slice(-200)); render(); return; }
+    if (a === 'askitem') { var ai = findItem(id); ui.askAbout = ai ? ai.item : ''; ui.askTo = ai && ai.owner && !same(ai.owner, S.me.name) ? ai.owner : 'Elliot'; ui.open = null; ui.tab = 'mine'; store('hymn_tab', 'mine'); render(); var af = document.getElementById('askform'); if (af) af.scrollIntoView(); var at = document.getElementById('ask_text'); if (at) at.focus(); return; }
+    if (a === 'askclear') { ui.askAbout = ''; render(); return; }
+    if (a === 'delask') { send({ a: 'delete_ask', id: id }, function () { S.asks = asks().filter(function (q) { return q.id !== id; }); }); return; }
     if (a === 'gotit') { ui.dismissed = true; lastLook = Date.now(); markSeen(); render(); return; }
     if (a === 'tab') { ui.tab = t.getAttribute('data-t'); store('hymn_tab', ui.tab); render(); return; }
     if (a === 'editjob') { ui.editJob = !ui.editJob; render(); return; }
@@ -759,6 +815,16 @@
       if (!v.task) return;
       clear();
       send({ a: 'add_task', who: v.who, task: v.task, due: v.due }, function () { S.tasks.push({ id: 'tmp' + Date.now(), who: v.who, task: v.task, due: v.due, done: '' }); });
+    } else if (kind === 'ask') {
+      if (!v.text) return;
+      var about = ui.askAbout || '';
+      clear(); ui.askAbout = ''; ui.askTo = '';
+      send({ a: 'ask', to: v.to, text: v.text, about: about }, function () { S.asks = asks().concat([{ id: 'tmp' + Date.now(), to: v.to, from: S.me.name, about: about, text: v.text, answer: '', asked: 'now' }]); });
+    } else if (kind === 'answer') {
+      var qid = f.getAttribute('data-id');
+      if (!v.text) return;
+      clear();
+      send({ a: 'answer', id: qid, text: v.text }, function () { var q = asks().filter(function (x) { return x.id === qid; })[0]; if (q) { q.answer = v.text; q.answered_by = S.me.name; q.answered = 'now'; } });
     } else if (kind === 'crew') {
       if (!v.name) return;
       clear(); ui.addCrew = false;
