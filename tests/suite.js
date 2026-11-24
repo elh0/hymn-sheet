@@ -246,6 +246,18 @@ async function uiTests() {
     await page.evaluate(function () { document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForFunction(function () { return /confirmed 2/.test(document.querySelector('.count').textContent); }, null, { timeout: 12000 });
   });
+  await check('phone: "Since you last looked" lists other people\'s changes', async function () {
+    await page.evaluate(function () { localStorage.setItem('hymn_seen_JAMES1', String(Date.now() - 3 * 3600e3)); });
+    act(b, 'ADMIN1', { a: 'add_item', item: 'Tiffen Black Pro-Mist', dept: 'Camera', supplier: 'MCX', confirm: 1 });
+    await page.reload();
+    await page.waitForSelector('.since');
+    var t = await page.textContent('.since');
+    assert(/Tiffen Black Pro-Mist/.test(t) && /Elliot/.test(t), t);
+    assert(!/James/.test(t), 'own changes are left out');
+    assert(await page.$('.tag.new'));
+    await page.click('[data-act=gotit]');
+    assert(!(await page.$('.since')));
+  });
   await check('a job path like /test loads the app (crew.elliot.onl/yzy)', async function () {
     var jp = await desk.newPage(); jp.on('pageerror', function (e) { errors.push(e.message); });
     await jp.goto(base + 'test?k=ADMIN1');

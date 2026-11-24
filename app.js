@@ -58,6 +58,40 @@
     if (location.pathname !== want) try { history.replaceState(null, '', want + '?k=' + encodeURIComponent(key)); } catch (e) {}
   }
 
+  /* ---------- since you last looked ---------- */
+  // The log's times read "24 Nov 20:18" (London). Changes by others after the
+  // last visit on this phone are listed at the top and marked in the log & kit.
+  var MON = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  function whenOf(t) {
+    var m = /^(\d{1,2}) (\w{3}) (\d{1,2}):(\d{2})/.exec(String(t || ''));
+    if (!m || MON[m[2]] === undefined) return 0;
+    var now = new Date(), d = new Date(now.getFullYear(), MON[m[2]], +m[1], +m[3], +m[4]);
+    if (d - now > 864e5) d.setFullYear(d.getFullYear() - 1);
+    return d.getTime();
+  }
+  var seenKey = 'hymn_seen_' + key;
+  var lastLook = Number(store(seenKey)) || 0, hiddenAt = 0;
+  function markSeen() { store(seenKey, String(Date.now())); }
+  function fresh() {
+    if (!lastLook || !S || !S.log) return [];
+    return S.log.filter(function (l) { return !same(l.who, S.me.name) && whenOf(l.time) > lastLook - 60000; });
+  }
+  function isFreshItem(i) {
+    return fresh().some(function (l) { return String(l.what).indexOf(i.item) >= 0; });
+  }
+  function sinceBlock() {
+    var f = fresh();
+    if (!f.length || ui.dismissed) return '';
+    var h = '<section class="since"><h2>Since you last looked <span class="grey">' + f.length + ' change' + (f.length > 1 ? 's' : '') + '</span></h2><ul>';
+    f.slice(0, 6).forEach(function (l) {
+      h += '<li><span>' + esc(first(l.who)) + '</span> <span class="grey">' + esc(l.what) + '</span></li>';
+    });
+    h += '</ul><div class="row">';
+    if (f.length > 6) h += '<button class="link" data-act="tab" data-t="log">See all ' + f.length + '</button>';
+    h += '<button class="link" data-act="gotit">Got it</button></div></section>';
+    return h;
+  }
+
   /* ---------- server ---------- */
   function get() {
     return fetch(API + '?a=state&k=' + encodeURIComponent(key), { cache: 'no-store' }).then(function (r) { return r.json(); });
@@ -164,6 +198,7 @@
     Array.prototype.forEach.call(root.querySelectorAll('[data-keep]'), function (el) { forms[el.getAttribute('data-keep')] = el.value; });
 
     var h = '<div class="wrap">' + header() + tabs() + '<main>';
+    if (ui.tab !== 'log') h += sinceBlock();
     if (ui.tab === 'kit') h += kitView();
     else if (ui.tab === 'mine') h += mineView();
     else if (ui.tab === 'crew') h += crewView();
@@ -278,6 +313,7 @@
     h += '<div class="name">' + esc(i.item) + (i.qty && i.qty !== '1' ? ' <span class="grey">×' + esc(i.qty) + '</span>' : '') + '</div>';
     var meta = [];
     function tag(cls, text) { return '<span class="tag ' + cls + '">' + text + '</span>'; }
+    if (isFreshItem(i)) meta.push(tag('t-blue new', 'new'));
     meta.push(!i.supplier || same(i.supplier, 'TBC') ? tag('t-red red', 'no supplier') : tag('t-blue', esc(i.supplier)));
     if (i.owner && !same(i.owner, i.asked_by)) meta.push(tag('t-plain', 'with ' + esc(first(i.owner))));
     if (i.asked_by) meta.push(tag('t-plain', 'asked ' + esc(first(i.asked_by))));
@@ -542,8 +578,9 @@
   }
 
   function logView() {
+    var f = fresh();
     return '<section><h2>Changes</h2><ol class="log">' + S.log.map(function (l) {
-      return '<li><span class="grey">' + esc(l.time) + '</span> <span>' + esc(l.who) + '</span> <span class="grey">' + esc(l.what) + '</span></li>';
+      return '<li' + (f.indexOf(l) >= 0 ? ' class="new"' : '') + '><span class="grey">' + esc(l.time) + '</span> <span>' + esc(l.who) + '</span> <span class="grey">' + esc(l.what) + '</span></li>';
     }).join('') + '</ol></section>';
   }
 
@@ -562,6 +599,8 @@
     if (a === 'adding') { ui.adding = !ui.adding; render(); var f = document.getElementById('add_item'); if (f) f.focus(); return; }
     if (a === 'editnotes') { ui.editNotes = !ui.editNotes; render(); return; }
     if (a === 'allflags') { ui.allFlags = !ui.allFlags; render(); return; }
+    if (a === 'gotit') { ui.dismissed = true; lastLook = Date.now(); markSeen(); render(); return; }
+    if (a === 'tab') { ui.tab = t.getAttribute('data-t'); store('hymn_tab', ui.tab); render(); return; }
     if (a === 'editjob') { ui.editJob = !ui.editJob; render(); return; }
     if (a === 'addcrew') { ui.addCrew = !ui.addCrew; render(); return; }
     if (a === 'crewopen') { var n = +t.getAttribute('data-n'); ui.crewOpen = ui.crewOpen === n ? null : n; render(); return; }
@@ -636,7 +675,13 @@
     clearTimeout(pollTimer);
     pollTimer = setTimeout(function () { if (!document.hidden) refresh().then(schedule, schedule); else schedule(); }, POLL_MS);
   }
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { hiddenAt = Date.now(); markSeen(); return; }
+    // Back after a while: what's new is measured from when they left.
+    if (hiddenAt && Date.now() - hiddenAt > 30 * 60000) { lastLook = hiddenAt; ui.dismissed = false; }
+    refresh();
+  });
+  window.addEventListener('pagehide', markSeen);
   window.addEventListener('online', function () { refresh(); });
 
   /* ---------- start ---------- */
