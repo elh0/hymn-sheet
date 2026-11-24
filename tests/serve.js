@@ -16,6 +16,7 @@ module.exports = function serve(backend, port) {
       });
       return;
     }
+    if (u.pathname === '/links.json' && backend.links) { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(backend.links)); }
     if (u.pathname === '/config.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); return res.end("window.HYMN_API = '/api'; window.HYMN_DP_EMAIL = 'dp@x.com';"); }
     var f = path.join(root, u.pathname === '/' ? 'index.html' : u.pathname);
     if (!f.startsWith(root)) { res.writeHead(404); return res.end(); }

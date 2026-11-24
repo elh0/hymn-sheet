@@ -709,6 +709,43 @@
   /* ---------- start ---------- */
   if (!API) { fatal('Not switched on yet. Elliot needs to paste the script link into config.js.'); return; }
   if (!key) { fatal('Open the link Elliot sent you. Each person has their own.'); return; }
-  if (S) render();
-  refresh().then(schedule, schedule);
+  if (NICE && location.protocol === 'http:') { location.replace('https://' + location.host + location.pathname + location.search); return; }
+  upgradeLink().then(function (moved) {
+    if (moved) return;
+    if (S) render();
+    refresh().then(schedule, schedule);
+  });
+
+  /* Old per-job links (?k=…) swap themselves for the person's forever link.
+     links.json maps them, encrypted with the old key, so the file is no use
+     to anyone without that key. */
+  function upgradeLink() {
+    var C = window.crypto && window.crypto.subtle;
+    if (!C || PERSON.test(key) || !window.TextEncoder) return Promise.resolve(false);
+    var enc = new TextEncoder();
+    function b(s) { return Uint8Array.from(atob(s), function (c) { return c.charCodeAt(0); }); }
+    function kdf(salt, it, bits) {
+      return C.importKey('raw', enc.encode(key), 'PBKDF2', false, ['deriveBits'])
+        .then(function (k) { return C.deriveBits({ name: 'PBKDF2', salt: salt, iterations: it, hash: 'SHA-256' }, k, bits); });
+    }
+    return fetch('links.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (L) {
+      if (!L || !L.links) return false;
+      return kdf(enc.encode('hymn-index'), L.it, 128).then(function (bits) {
+        var id = btoa(String.fromCharCode.apply(null, new Uint8Array(bits)));
+        var e = L.links[id];
+        if (!e) return false;
+        return kdf(b(e.s), L.it, 256)
+          .then(function (raw) { return C.importKey('raw', raw, 'AES-GCM', false, ['decrypt']); })
+          .then(function (k) { return C.decrypt({ name: 'AES-GCM', iv: b(e.i) }, k, b(e.c)); })
+          .then(function (plain) {
+            var nk = new TextDecoder().decode(plain);
+            if (!PERSON.test(nk)) return false;
+            var j = S && S.job && S.job.job;
+            store('hymn_key', nk); if (j) store('hymn_job_' + nk, j);
+            location.replace(NICE ? '/' + nk : location.pathname + '?k=' + nk);
+            return true;
+          });
+      });
+    }).catch(function () { return false; });
+  }
 })();

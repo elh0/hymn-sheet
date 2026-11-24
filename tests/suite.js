@@ -317,6 +317,20 @@ async function uiTests() {
     assert.strictEqual((await tp.textContent('h1')).trim(), other === 'other' ? 'Other Job' : 'Test Job', 'remembers the job');
     await tp.close();
   });
+  await check('an old per-job link swaps itself for the forever link', async function () {
+    var c = require('crypto'), IT = 1000;
+    var pkey = act(b, 'ADMIN1', { a: 'give_link', key: 'DAVO1' }).crew.filter(function (x) { return x.name === 'Davo'; })[0].person;
+    var idx = c.pbkdf2Sync('DAVO1', 'hymn-index', IT, 16, 'sha256').toString('base64');
+    var salt = c.randomBytes(16), iv = c.randomBytes(12), k = c.pbkdf2Sync('DAVO1', salt, IT, 32, 'sha256');
+    var ci = c.createCipheriv('aes-256-gcm', k, iv), ct = Buffer.concat([ci.update(pkey), ci.final(), ci.getAuthTag()]);
+    b.links = { it: IT, links: {} }; b.links.links[idx] = { s: salt.toString('base64'), i: iv.toString('base64'), c: ct.toString('base64') };
+    var tp = await phone.newPage();
+    await tp.goto(base + '?k=DAVO1');
+    await tp.waitForURL(function (u) { return String(u).indexOf(pkey) >= 0; });
+    await tp.waitForSelector('h1');
+    assert(/Davo/.test(await tp.textContent('header .me')));
+    await tp.close(); delete b.links;
+  });
   await check('a job path like /test loads the app (crew.elliot.onl/yzy)', async function () {
     var jp = await desk.newPage(); jp.on('pageerror', function (e) { errors.push(e.message); });
     await jp.goto(base + 'test?k=ADMIN1');
