@@ -281,7 +281,14 @@ async function uiTests() {
     await ep.reload(); await ep.click('[data-tab=kit]'); await ep.waitForSelector('.flags');
     var t = await ep.textContent('.flags'); if (/Show all/.test(t)) { await ep.click('[data-act=allflags]'); t = await ep.textContent('.flags'); }
     assert(/Grip not booked yet, so nobody's bringing: Dolly \+ track\. Louis to book one\?/.test(t), t);
+    var opts = await ep.evaluate(function () { return document.querySelector('optgroup') ? [].map.call(document.querySelectorAll('optgroup option'), function (o) { return o.textContent; }) : null; });
     await ep.click('[data-tab=kit]');
+  });
+  await check('booked roles are left out of "Not booked yet" (Davo is DIT)', async function () {
+    await ep.click('[data-act=openitem][data-id=i2]');
+    var o = await ep.$$eval('select[name=owner] optgroup option', function (l) { return l.map(function (x) { return x.textContent; }); });
+    assert(o.indexOf('Grip (not named yet)') >= 0 && o.indexOf('DIT (not named yet)') < 0 && o.indexOf('1st AC (not named yet)') < 0, o.join(', '));
+    await ep.click('[data-act=openitem][data-id=i2]');
   });
   await check('desktop: Elliot confirms an item', async function () {
     await ep.click('[data-tab=kit]');

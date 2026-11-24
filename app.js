@@ -254,7 +254,8 @@
     var roleless = {};
     S.items.concat(S.tasks).forEach(function (i) { var w = i.owner || i.who; if (isUnnamed(w)) (roleless[w] = roleless[w] || []).push(i.item || i.task); });
     Object.keys(roleless).forEach(function (w) {
-      var l = roleless[w];
+      var l = roleless[w], got = bookedAs(w.replace(UNNAMED, ''));
+      if (got) { out.push({ text: first(got.name) + ' is booked as ' + (got.role || 'crew').toLowerCase() + ' now. Put their name on: ' + l.slice(0, 3).join(', ') + (l.length > 3 ? '…' : ''), auto: 'unnamed' }); return; }
       var booker = S.crew.filter(function (c) { return /production|producer|coordinator|\bpm\b/i.test(c.role || ''); }).map(function (c) { return first(c.name); });
       out.push({ text: w.replace(UNNAMED, '') + ' not booked yet, so nobody\'s bringing: ' + l.slice(0, 3).join(', ') + (l.length > 3 ? '…' : '') + '. ' + (booker.length ? booker.join(' or ') : 'Production') + ' to book one?', auto: 'unnamed' });
     });
@@ -430,11 +431,16 @@
   // Roles that can be picked before anyone's booked: "Grip (not named yet)". They raise a flag until a name goes in.
   var OPEN_ROLES = ['Grip', 'Gaffer', 'Spark', '1st AC', '2nd AC', 'DIT', 'Steadicam op', 'Playback', 'Production', 'Art dept'];
   var UNNAMED = ' (not named yet)';
+  var ROLE_MATCH = { 'Grip': /grip/i, 'Gaffer': /gaffer/i, 'Spark': /spark|electric/i, '1st AC': /1st ac|focus/i, '2nd AC': /2nd ac|clapper|loader/i,
+    'DIT': /\bdit\b|data/i, 'Steadicam op': /steadicam/i, 'Playback': /playback|vtr|video/i, 'Production': /production|producer|coordinator|\bpm\b/i, 'Art dept': /\bart\b|designer|props/i };
   function isUnnamed(n) { return String(n || '').indexOf(UNNAMED) > 0; }
+  // Someone on the crew already does this role (Mark, Gaffer).
+  function bookedAs(role) { var re = ROLE_MATCH[role]; return re ? S.crew.filter(function (c) { return re.test(c.role || ''); })[0] : null; }
   function crewOptions(cur) {
     var names = S.crew.map(function (c) { return c.name; }).concat(['Elliot']);
-    var roles = OPEN_ROLES.map(function (r) { return r + UNNAMED; });
+    var roles = OPEN_ROLES.filter(function (r) { return !bookedAs(r); }).map(function (r) { return r + UNNAMED; });
     if (cur && names.indexOf(cur) < 0 && roles.indexOf(cur) < 0) names.unshift(cur);
+    if (!roles.length) return names.map(opt).join('');
     function opt(n) { return '<option' + (same(n, cur) ? ' selected' : '') + '>' + esc(n) + '</option>'; }
     return names.map(opt).join('') + '<optgroup label="Not booked yet">' + roles.map(opt).join('') + '</optgroup>';
   }
