@@ -459,7 +459,7 @@
     S.crew.forEach(function (c) {
       if (!c.key) return;
       var link = linkFor(c.person || c.key);
-      var wa = 'https://wa.me/' + (c.phone || '').replace(/[^\d]/g, '').replace(/^0/, '44') + '?text=' + encodeURIComponent('hey ' + first(c.name).toLowerCase() + ', everything for ' + S.job.title + ' is on here, kit, tasks & crew. add your kit & tick stuff off as it\'s sorted:\n\n' + link);
+      var wa = waHref(c, link);
       h += '<li><span>' + esc(c.name) + '</span><span class="row"><button class="link" data-act="copy" data-text="' + esc(link) + '">Copy</button><a class="link" target="_blank" rel="noopener" href="' + esc(wa) + '">WhatsApp</a></span></li>';
     });
     return h + '</ul></section>';
@@ -488,8 +488,8 @@
           if (c.email) h += '<div class="row"><a class="btn msg" target="_blank" rel="noopener" href="' + esc(messageFor(c)) + '">Message ' + esc(first(c.name)) + '</a></div>';
           h += '<div class="row"><button class="link" data-act="copy" data-text="' + esc(link) + '">Copy link</button>';
           if (!c.person && S.v !== 'pipe-1') h += '<button class="link" data-act="givelink" data-key="' + esc(c.key) + '">Make one link for all jobs</button>';
-          h += '<a class="link" target="_blank" rel="noopener" href="https://wa.me/' + esc((c.phone || '').replace(/[^\d]/g, '').replace(/^0/, '44')) + '?text=' + encodeURIComponent('hey ' + first(c.name).toLowerCase() + ', everything for ' + S.job.title + ' is on here, kit, tasks & crew. add your kit & tick stuff off as it\'s sorted:\n\n' + link) + '">WhatsApp link</a>';
-          if (c.email) h += '<a class="link" target="_blank" rel="noopener" href="' + esc(mailto([c.email], S.job.title + ': Hymn Sheet', 'Hey ' + first(c.name) + ',\n\nEverything for ' + S.job.title + ' is on here: kit, tasks & crew. Add your kit & tick stuff off as it\'s sorted:\n\n' + link + '\n\nThanks!\nElliot')) + '">Email link</a></div>';
+          h += '<a class="link" target="_blank" rel="noopener" href="' + esc(waHref(c, link)) + '">WhatsApp link</a>';
+          if (c.email) h += '<a class="link" target="_blank" rel="noopener" href="' + esc(mailto([c.email], S.job.title + ': prep sheet', inviteEmail(c, link))) + '">Email link</a></div>';
         }
         h += '</div>';
       }
@@ -585,6 +585,38 @@
   }
 
   /* Suggested emails for anyone on the sheet. They open in the person's own mail, ready to edit & send. */
+  /* Invite wording (Elliot's voice: short, "&", no sign-up talk beyond one line). */
+  function roleKind(c) {
+    if (/production|producer|coordinator|\bpm\b|runner/i.test(c.role || '')) return 'prod';
+    if (/director/i.test(c.role || '') || c.dept === 'Director') return 'dir';
+    if (S.crew.some(function (x) { return x === c; }) && supplierLike(c)) return 'supplier';
+    return 'crew';
+  }
+  function supplierLike(c) { return S.items.some(function (i) { return same(i.supplier, c.role); }); }
+  function whatToDo(c) {
+    var k = roleKind(c);
+    if (k === 'prod') return ['You can see the full kit list, what\'s confirmed & who\'s bringing what, plus the crew & everyone\'s tasks.', 'Tick stuff off or add anything as it\'s sorted, everyone sees it live.'];
+    if (k === 'dir') return ['It\'s got the plan, kit & crew in one place, so you can see where camera\'s at without chasing anyone.', 'Flag anything you want changed & I\'ll pick it up.'];
+    if (k === 'supplier') return ['It\'s got the camera list with what\'s confirmed & what\'s still open.', 'Tick stuff off as it\'s pulled, or flag anything you can\'t get.'];
+    return ['It\'s got the kit list, who\'s bringing what, your tasks & the crew.', 'Add any kit you need & tick stuff off as it\'s sorted, everyone sees it live.'];
+  }
+  function inviteEmail(c, link) {
+    var w = whatToDo(c);
+    return 'Hey ' + first(c.name) + ',\n\n' +
+      'I\'m running prep for ' + S.job.title + ' through this, so everything\'s in one place instead of spread over WhatsApp & email:\n\n' +
+      link + '\n\n' + w[0] + ' ' + w[1] + '\n\n' +
+      'Quick how-to: Kit is the full list (tap the box when something\'s packed, Confirm once it\'s locked), Mine is just your bits, Notes has my DP notes & the shot list, & Log shows every change with who made it.\n\n' +
+      'It\'s your own link, no sign-up, & it\'ll work for any jobs we do together. Worth saving to your home screen.\n\n' +
+      'Cheers,\nElliot';
+  }
+  function inviteWhatsApp(c, link) {
+    var w = whatToDo(c);
+    return 'hey ' + first(c.name).toLowerCase() + ', running prep for ' + S.job.title + ' through this so it\'s all in one place:\n\n' +
+      link + '\n\n' + w[0].toLowerCase() + '\n\n' + w[1].toLowerCase() + '\n\n' +
+      'it\'s your own link, no sign-up, works for any future jobs too';
+  }
+  function waHref(c, link) { return 'https://wa.me/' + (c.phone || '').replace(/[^\d]/g, '').replace(/^0/, '44') + '?text=' + encodeURIComponent(inviteWhatsApp(c, link)); }
+
   function production() { return S.crew.filter(function (c) { return /production manager|producer|coordinator|\bpm\b/i.test(c.role || '') && c.email; }); }
   function dpEmail() { return window.HYMN_DP_EMAIL || ''; }
   function supplierContact(sup) { return S.crew.filter(function (c) { return c.email && sup && same(c.role, sup); })[0]; }
