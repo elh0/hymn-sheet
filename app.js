@@ -107,8 +107,27 @@
       .then(function (r) { return r.json(); });
   }
 
+  var prefetched = false;
+  function prefetch() {
+    if (prefetched || !S || !S.me || !S.me.admin || !S.jobs || S.jobs.length < 2) return;
+    prefetched = true;
+    S.jobs.forEach(function (x, n) {
+      if (x.job === job) return;
+      setTimeout(function () {
+        fetch(API + '?a=state&k=' + encodeURIComponent(key) + '&job=' + encodeURIComponent(x.job), { cache: 'no-store' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) { if (d && !d.error && d.job && d.job.job === x.job) save('hymn_state_' + key + '_' + x.job, d); })
+          .catch(function () {});
+      }, 1500 * (n + 1));
+    });
+  }
+
   function took(data) {
     if (data && data.error) { status = { text: data.error, bad: true }; return false; }
+    // An answer for a job they've since switched away from: keep it for later, don't show it.
+    if (job && data && data.job && data.job.job !== job && data.jobs && data.jobs.some(function (x) { return x.job === job; })) {
+      save('hymn_state_' + key + '_' + data.job.job, data); return true;
+    }
     S = data; lastOk = Date.now();
     if (S.job && S.job.job) { job = S.job.job; store('hymn_job_' + key, job); }
     save('hymn_state_' + key + '_' + job, S); tidyUrl();
@@ -125,9 +144,12 @@
   function refresh() {
     if (!API || !key || busy) return Promise.resolve();
     if (queue.length) return flush();
+    var asked = job;
     return get().then(function (d) {
       if (d && d.error && !S) { fatal(d.error); return; }
+      if (asked !== job) return;   // switched job while this was loading
       took(d);
+      prefetch();
       if (typing()) paintStatus(); else render();
     }).catch(function () { offline(); });
   }
@@ -206,8 +228,10 @@
     Array.prototype.forEach.call(root.querySelectorAll('[data-keep]'), function (el) { forms[el.getAttribute('data-keep')] = el.value; });
 
     var h = '<div class="wrap">' + header() + tabs() + '<main>';
-    if (ui.tab !== 'log') h += sinceBlock();
-    if (ui.tab === 'kit') h += kitView();
+    if (S.loading) h += '<p class="grey gap">Loading…</p>';
+    else if (ui.tab !== 'log') h += sinceBlock();
+    if (S.loading) {}
+    else if (ui.tab === 'kit') h += kitView();
     else if (ui.tab === 'mine') h += mineView();
     else if (ui.tab === 'crew') h += crewView();
     else if (ui.tab === 'notes' || ui.tab === 'shots') h += notesView() + shotsView();
@@ -615,9 +639,14 @@
     if (a === 'allflags') { ui.allFlags = !ui.allFlags; render(); return; }
     if (a === 'job') {
       job = t.getAttribute('data-job'); store('hymn_job_' + key, job);
-      S = load('hymn_state_' + key + '_' + job) || S; ui.open = null; ui.dismissed = false;
-      status = { text: 'Opening…', bad: false }; render();
-      get().then(function (d) { took(d); render(); }).catch(function () { offline(); });
+      var cached = load('hymn_state_' + key + '_' + job);
+      var pick = (S.jobs || []).filter(function (x) { return x.job === job; })[0] || { job: job };
+      S = cached || { v: S.v, me: S.me, jobs: S.jobs, job: { job: job, title: pick.title, dates: pick.dates }, crew: [], items: [], tasks: [], shots: [], flags: [], log: [], loading: true };
+      ui.open = null; ui.dismissed = false; ui.filter = 'all';
+      status = { text: cached ? 'Updating…' : 'Opening ' + (pick.title || job) + '…', bad: false };
+      render(); window.scrollTo(0, 0);
+      var want = job;
+      get().then(function (d) { if (want !== job) return; took(d); render(); }).catch(function () { offline(); });
       return;
     }
     if (a === 'givelink') { send({ a: 'give_link', key: t.getAttribute('data-key') }); return; }
