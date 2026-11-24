@@ -213,6 +213,8 @@
     var f = openFlags();
     if (!f.length) return '';
     var h = '<section class="flags"><h2 class="red">Flags (' + f.length + ')</h2><ol>';
+    var all = f.length;
+    if (!ui.allFlags && all > 3) f = f.slice(0, 3);
     f.forEach(function (x) {
       h += '<li><span>' + esc(x.text) + (x.by ? ' <i>' + esc(x.by) + (x.time ? ', ' + esc(x.time) : '') + '</i>' : '') + '</span>';
       if (x.manual && S.me.admin) h += '<button class="link" data-act="flag" data-id="' + esc(x.id) + '">Sorted</button>';
@@ -220,6 +222,7 @@
       if (x.auto === 'nosupplier') h += '<button class="link" data-act="filter" data-f="nosupplier">Show</button>';
       h += '</li>';
     });
+    if (all > 3) h += '<li><button class="link" data-act="allflags">' + (ui.allFlags ? 'Show fewer' : 'Show all ' + all) + '</button></li>';
     return h + '</ol></section>';
   }
 
@@ -428,6 +431,7 @@
     if (a === 'filter') { ui.filter = ui.filter === t.getAttribute('data-f') ? 'all' : t.getAttribute('data-f'); ui.tab = 'kit'; render(); return; }
     if (a === 'openitem') { ui.open = ui.open === id ? null : id; render(); return; }
     if (a === 'adding') { ui.adding = !ui.adding; render(); var f = document.getElementById('add_item'); if (f) f.focus(); return; }
+    if (a === 'allflags') { ui.allFlags = !ui.allFlags; render(); return; }
     if (a === 'editjob') { ui.editJob = !ui.editJob; render(); return; }
     if (a === 'addcrew') { ui.addCrew = !ui.addCrew; render(); return; }
     if (a === 'crewopen') { var n = +t.getAttribute('data-n'); ui.crewOpen = ui.crewOpen === n ? null : n; render(); return; }

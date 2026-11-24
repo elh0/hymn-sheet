@@ -104,7 +104,7 @@ async function uiTests() {
     assert(w[0] <= w[1], w.join(' > '));
   });
   await check('phone: flags show no-supplier and unconfirmed', async function () {
-    var t = await page.textContent('.flags');
+    var t = await page.textContent('.flags'); if (/Show all/.test(t)) { await page.click('[data-act=allflags]'); t = await page.textContent('.flags'); }
     assert(/no supplier: NDs/.test(t) && /not confirmed/.test(t), t);
   });
   await check('phone: tick packed saves to the sheet', async function () {
