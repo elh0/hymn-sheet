@@ -593,40 +593,39 @@
     return 'crew';
   }
   function supplierLike(c) { return S.items.some(function (i) { return same(i.supplier, c.role); }); }
+  // What's on there for them, one short line.
   function whatToDo(c) {
     var k = roleKind(c);
-    if (k === 'prod') return ['You can see the full kit list, what\'s confirmed & who\'s bringing what, plus the crew & everyone\'s tasks.', 'Tick stuff off or add anything as it\'s sorted, everyone sees it live.'];
-    if (k === 'dir') return ['It\'s got the plan, kit & crew in one place, so you can see where camera\'s at without chasing anyone.', 'Flag anything you want changed & I\'ll pick it up.'];
-    if (k === 'supplier') return ['It\'s got the camera list with what\'s confirmed & what\'s still open.', 'Tick stuff off as it\'s pulled, or flag anything you can\'t get.'];
-    return ['It\'s got the kit list, who\'s bringing what, your tasks & the crew.', 'Add any kit you need & tick stuff off as it\'s sorted, everyone sees it live.'];
+    if (k === 'prod') return 'Full kit list, what\'s confirmed & who\'s bringing what, plus crew & everyone\'s tasks.';
+    if (k === 'dir') return 'Plan, kit & crew all in there.';
+    if (k === 'supplier') return 'Camera list with what\'s confirmed & what\'s still open.';
+    return 'Kit list, who\'s bringing what, your tasks & the crew.';
   }
   // One line on what's in it for them, by role.
   function benefit(c) {
     var k = roleKind(c), r = (c.role || '') + ' ' + (c.dept || '');
-    if (k === 'prod') return 'Means you\'re not chasing camera for updates, & you can check the kit list against the quote before it lands.';
-    if (k === 'dir') return 'Means you know exactly what\'s coming on the day without chasing anyone.';
-    if (k === 'supplier') return 'Means one clean list to work from instead of bits over five email threads.';
-    if (/gaffer|spark|electric|lighting/i.test(r)) return 'Worth adding your lighting list so we can check it against the plan before the truck\'s loaded.';
-    if (/grip/i.test(r)) return 'Worth adding your grip list & any rigging asks so they make it onto the quote.';
-    if (/dit|data/i.test(r)) return 'Worth adding your cart, cards & drives so data\'s sorted before the day.';
-    if (/video|playback|vtr/i.test(r)) return 'Worth adding your monitors & wireless so we know what\'s covered.';
-    if (/focus|ac\b|camera|clapper|loader|operator|steadicam/i.test(r)) return 'Worth adding your own kit (focus package, batteries, monitors etc) so nothing gets doubled up or missed at prep.';
-    return 'Worth adding anything you need so nothing gets missed.';
+    if (k === 'prod') return 'Should save you chasing me for updates, & you can check the kit against the quote.';
+    if (k === 'dir') return 'So you can see where camera\'s at without chasing anyone. Flag anything you wanna change & I\'ll pick it up.';
+    if (k === 'supplier') return 'Tick stuff off as it\'s pulled or flag anything you can\'t get.';
+    if (/gaffer|spark|electric|lighting/i.test(r)) return 'Stick your lighting list on so we can check it against the plan before the truck\'s loaded.';
+    if (/grip/i.test(r)) return 'Stick your grip list & any rigging asks on so they make the quote.';
+    if (/dit|data/i.test(r)) return 'Stick your cart, cards & drives on so data\'s sorted before the day.';
+    if (/video|playback|vtr/i.test(r)) return 'Stick your monitors & wireless on so we know what\'s covered.';
+    if (/focus|ac\b|camera|clapper|loader|operator|steadicam/i.test(r)) return 'Stick your own kit on (focus package, batteries, monitors etc) so nothing gets doubled up or missed.';
+    return 'Stick anything you need on so nothing gets missed.';
   }
   function inviteEmail(c, link) {
-    var w = whatToDo(c);
-    return 'Hey ' + first(c.name) + ',\n\n' +
-      'I\'m running prep for ' + S.job.title + ' through this, so everything\'s in one place instead of spread over WhatsApp & email:\n\n' +
-      link + '\n\n' + w[0] + ' ' + w[1] + '\n\n' + benefit(c) + '\n\n' +
-      'Quick how-to: Kit is the full list (tap the box when something\'s packed, Confirm once it\'s locked), Mine is just your bits, Notes has my DP notes & the shot list, & Log shows every change with who made it.\n\n' +
-      'It\'s your own link, no sign-up, & it\'ll work for any jobs we do together. Worth saving to your home screen.\n\n' +
-      'Cheers,\nElliot';
+    return 'Heya ' + first(c.name) + ', hope ya good!\n\n' +
+      'I\'m getting messages from all angles on jobs so I\'ve put everything for ' + S.job.title + ' in one place:\n\n' +
+      link + '\n\n' + whatToDo(c) + ' ' + benefit(c) + '\n\n' +
+      'It\'s your own link, no sign up, & works for any jobs we do together. Worth saving to your home screen.\n\n' +
+      'Lmk if anything\'s off!\n\nThanks,\nElliot';
   }
   function inviteWhatsApp(c, link) {
-    var w = whatToDo(c);
-    return 'hey ' + first(c.name).toLowerCase() + ', running prep for ' + S.job.title + ' through this so it\'s all in one place:\n\n' +
-      link + '\n\n' + w[0].toLowerCase() + '\n\n' + w[1].toLowerCase() + '\n\n' + benefit(c).toLowerCase() + '\n\n' +
-      'it\'s your own link, no sign-up, works for any future jobs too';
+    return 'heya ' + first(c.name).toLowerCase() + '!\n\n' +
+      'putting everything for ' + S.job.title + ' in one place so it\'s not all over whatsapp\n\n' +
+      link + '\n\n' + whatToDo(c).toLowerCase() + '\n\n' + benefit(c).toLowerCase() + '\n\n' +
+      'your own link, no sign up, works for future jobs too\n\nlmk if anything\'s off';
   }
   function waHref(c, link) { return 'https://wa.me/' + (c.phone || '').replace(/[^\d]/g, '').replace(/^0/, '44') + '?text=' + encodeURIComponent(inviteWhatsApp(c, link)); }
 
