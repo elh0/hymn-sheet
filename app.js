@@ -259,12 +259,13 @@
     h += '<div class="body" data-act="openitem" data-id="' + esc(i.id) + '">';
     h += '<div class="name">' + esc(i.item) + (i.qty && i.qty !== '1' ? ' <span class="grey">×' + esc(i.qty) + '</span>' : '') + '</div>';
     var meta = [];
-    meta.push(!i.supplier || same(i.supplier, 'TBC') ? '<span class="red">no supplier</span>' : esc(i.supplier));
-    if (i.owner && !same(i.owner, i.asked_by)) meta.push('with ' + esc(first(i.owner)));
-    if (i.asked_by) meta.push('asked ' + esc(first(i.asked_by)));
-    meta.push(i.confirmed ? 'confirmed' : '<span class="amber">not confirmed</span>');
-    if (i.packed) meta.push('packed ' + esc(first(i.packed.split(' · ')[0])));
-    h += '<div class="meta">' + meta.join(' · ') + '</div>';
+    function tag(cls, text) { return '<span class="tag ' + cls + '">' + text + '</span>'; }
+    meta.push(!i.supplier || same(i.supplier, 'TBC') ? tag('t-red red', 'no supplier') : tag('t-blue', esc(i.supplier)));
+    if (i.owner && !same(i.owner, i.asked_by)) meta.push(tag('t-plain', 'with ' + esc(first(i.owner))));
+    if (i.asked_by) meta.push(tag('t-plain', 'asked ' + esc(first(i.asked_by))));
+    meta.push(i.confirmed ? tag('t-green', 'confirmed') : tag('t-yellow amber', 'not confirmed'));
+    if (i.packed) meta.push(tag('t-grey', 'packed ' + esc(first(i.packed.split(' · ')[0]))));
+    h += '<div class="meta">' + meta.join('<span class="sep"> · </span>') + '</div>';
     if (i.notes && !open) h += '<div class="meta note">' + esc(i.notes) + '</div>';
     h += '</div>';
     if (S.me.admin) h += '<button class="tick' + (i.confirmed ? ' on' : '') + '" data-act="confirm" data-id="' + esc(i.id) + '">' + (i.confirmed ? 'OK' : 'Confirm') + '</button>';
@@ -369,10 +370,10 @@
       h += '<span class="dot' + (c.online ? ' on' : '') + '" title="' + (c.online ? 'online now' : 'offline') + '"></span>';
       h += '<div class="body" data-act="crewopen" data-n="' + n + '"><div class="name">' + esc(c.name) + '</div>';
       var meta = [esc(c.role || c.dept || '')];
-      meta.push(c.online ? 'online now' : c.last ? 'seen ' + esc(c.last) : '<span class="amber">not opened yet</span>');
-      if (t.length) meta.push('tasks ' + done + '/' + t.length);
-      if (c.dept !== 'Other' && c.dept !== 'Director') meta.push(c.kit_done ? 'kit in' : 'kit not in');
-      h += '<div class="meta">' + meta.join(' · ') + '</div>';
+      meta.push(c.online ? '<span class="tag t-green">online now</span>' : c.last ? '<span class="tag t-plain">seen ' + esc(c.last) + '</span>' : '<span class="tag t-yellow amber">not opened yet</span>');
+      if (t.length) meta.push('<span class="tag t-grey">tasks ' + done + '/' + t.length + '</span>');
+      if (c.dept !== 'Other' && c.dept !== 'Director') meta.push(c.kit_done ? '<span class="tag t-green">kit in</span>' : '<span class="tag t-plain">kit not in</span>');
+      h += '<div class="meta">' + meta.map(function (m, x) { return x ? m : '<span class="tag t-plain">' + m + '</span>'; }).join('<span class="sep"> · </span>') + '</div>';
       if (open) {
         h += '<div class="contact">';
         if (c.phone) h += '<a href="tel:' + esc(c.phone.replace(/\s/g, '')) + '">' + esc(c.phone) + '</a> ';
