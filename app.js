@@ -600,11 +600,24 @@
     if (k === 'supplier') return ['It\'s got the camera list with what\'s confirmed & what\'s still open.', 'Tick stuff off as it\'s pulled, or flag anything you can\'t get.'];
     return ['It\'s got the kit list, who\'s bringing what, your tasks & the crew.', 'Add any kit you need & tick stuff off as it\'s sorted, everyone sees it live.'];
   }
+  // One line on what's in it for them, by role.
+  function benefit(c) {
+    var k = roleKind(c), r = (c.role || '') + ' ' + (c.dept || '');
+    if (k === 'prod') return 'Means you\'re not chasing camera for updates, & you can check the kit list against the quote before it lands.';
+    if (k === 'dir') return 'Means you know exactly what\'s coming on the day without chasing anyone.';
+    if (k === 'supplier') return 'Means one clean list to work from instead of bits over five email threads.';
+    if (/gaffer|spark|electric|lighting/i.test(r)) return 'Worth adding your lighting list so we can check it against the plan before the truck\'s loaded.';
+    if (/grip/i.test(r)) return 'Worth adding your grip list & any rigging asks so they make it onto the quote.';
+    if (/dit|data/i.test(r)) return 'Worth adding your cart, cards & drives so data\'s sorted before the day.';
+    if (/video|playback|vtr/i.test(r)) return 'Worth adding your monitors & wireless so we know what\'s covered.';
+    if (/focus|ac\b|camera|clapper|loader|operator|steadicam/i.test(r)) return 'Worth adding your own kit (focus package, batteries, monitors etc) so nothing gets doubled up or missed at prep.';
+    return 'Worth adding anything you need so nothing gets missed.';
+  }
   function inviteEmail(c, link) {
     var w = whatToDo(c);
     return 'Hey ' + first(c.name) + ',\n\n' +
       'I\'m running prep for ' + S.job.title + ' through this, so everything\'s in one place instead of spread over WhatsApp & email:\n\n' +
-      link + '\n\n' + w[0] + ' ' + w[1] + '\n\n' +
+      link + '\n\n' + w[0] + ' ' + w[1] + '\n\n' + benefit(c) + '\n\n' +
       'Quick how-to: Kit is the full list (tap the box when something\'s packed, Confirm once it\'s locked), Mine is just your bits, Notes has my DP notes & the shot list, & Log shows every change with who made it.\n\n' +
       'It\'s your own link, no sign-up, & it\'ll work for any jobs we do together. Worth saving to your home screen.\n\n' +
       'Cheers,\nElliot';
@@ -612,7 +625,7 @@
   function inviteWhatsApp(c, link) {
     var w = whatToDo(c);
     return 'hey ' + first(c.name).toLowerCase() + ', running prep for ' + S.job.title + ' through this so it\'s all in one place:\n\n' +
-      link + '\n\n' + w[0].toLowerCase() + '\n\n' + w[1].toLowerCase() + '\n\n' +
+      link + '\n\n' + w[0].toLowerCase() + '\n\n' + w[1].toLowerCase() + '\n\n' + benefit(c).toLowerCase() + '\n\n' +
       'it\'s your own link, no sign-up, works for any future jobs too';
   }
   function waHref(c, link) { return 'https://wa.me/' + (c.phone || '').replace(/[^\d]/g, '').replace(/^0/, '44') + '?text=' + encodeURIComponent(inviteWhatsApp(c, link)); }
