@@ -107,6 +107,16 @@ async function backendTests() {
     assert(!act(b, 'MILO1', { a: 'delete_ask', id: id }).error);
     assert(act(b, 'MILO1', { a: 'ask', to: 'Milo Brown', text: 'x' }).error);
   });
+  await check('production books a missing role; crew can\'t; Elliot gives them a link', function () {
+    assert(act(b, 'JAMES1', { a: 'add_booking', name: 'Henry', role: 'Grip' }).error);
+    var r = act(b, 'LOUIS1', { a: 'add_booking', name: 'Henry Grip', role: 'Grip', phone: '07000 111222' }); assert(!r.error, r.error);
+    var id = r.bookings[0].id; assert.strictEqual(r.bookings[0].by, 'Louis Jones');
+    assert(act(b, 'LOUIS1', { a: 'give_booking', id: id }).error);
+    var g = act(b, 'ADMIN1', { a: 'give_booking', id: id }); assert(!g.error, g.error);
+    var h = g.crew.filter(function (c) { return c.name === 'Henry Grip'; })[0];
+    assert(h && h.dept === 'Grip' && h.person, JSON.stringify(h));
+    assert(!g.bookings.length);
+  });
   await check('crew tick their own task', function () { assert(act(b, 'JAMES1', { a: 'tick_task', id: 't1' }).tasks[0].done); });
   await check('every change goes in the log', function () {
     var s = b.get({ a: 'state', k: 'ADMIN1' });
@@ -289,6 +299,17 @@ async function uiTests() {
     var o = await ep.$$eval('select[name=owner] optgroup option', function (l) { return l.map(function (x) { return x.textContent; }); });
     assert(o.indexOf('Grip (not named yet)') >= 0 && o.indexOf('DIT (not named yet)') < 0 && o.indexOf('1st AC (not named yet)') < 0, o.join(', '));
     await ep.click('[data-act=openitem][data-id=i2]');
+  });
+  await check('desktop: crew needed flags a missing role; Add name puts them on the crew', async function () {
+    act(b, 'ADMIN1', { a: 'set_job', fields: { needs: 'DIT, Spark' } });
+    await ep.reload(); await ep.click('[data-tab=kit]'); await ep.waitForSelector('.flags');
+    var t = await ep.textContent('.flags'); if (/Show all/.test(t)) { await ep.click('[data-act=allflags]'); t = await ep.textContent('.flags'); }
+    assert(/No Spark booked yet\. Louis to book one\?/.test(t) && !/No DIT/.test(t), t);
+    await ep.click('[data-act=booknow][data-role=Spark]');
+    await ep.fill('#book_name', 'Sam Spark');
+    await ep.click('form[data-form=booking] button[type=submit]');
+    await ep.waitForFunction(function () { return !document.getElementById('status').classList.contains('show') && !/No Spark/.test(document.body.textContent); });
+    assert(b.get({ a: 'state', k: 'ADMIN1' }).crew.some(function (c) { return c.name === 'Sam Spark' && c.dept === 'Lighting'; }));
   });
   await check('desktop: Elliot confirms an item', async function () {
     await ep.click('[data-tab=kit]');

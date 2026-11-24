@@ -7,7 +7,7 @@
 
   var CREW_ITEM_FIELDS = ['qty', 'supplier', 'owner', 'notes'];
   var ADMIN_ITEM_FIELDS = ['dept', 'item', 'qty', 'supplier', 'owner', 'notes', 'asked_by'];
-  var JOB_FIELDS = ['title', 'dates', 'start', 'call', 'location', 'prep', 'deck', 'notes', 'dp_notes'];
+  var JOB_FIELDS = ['title', 'dates', 'start', 'call', 'location', 'prep', 'deck', 'notes', 'dp_notes', 'needs'];
 
   // Forever links: crew.elliot.onl/milo-k7f3x2a9 (first name + 8 random letters/digits).
   function personKey(name) {
@@ -25,8 +25,19 @@
     })[0];
   }
 
+  function isProd(me) { return /production|producer|coordinator|\bpm\b/i.test((me && me.role) || ''); }
   function same(a, b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); }
   function clean(s, n) { return String(s === undefined || s === null ? '' : s).trim().slice(0, n || 300); }
+  function deptFor(role) {
+    var r = String(role || '');
+    if (/grip/i.test(r)) return 'Grip';
+    if (/gaffer|spark|electric|lighting/i.test(r)) return 'Lighting';
+    if (/\bdit\b|data/i.test(r)) return 'DIT';
+    if (/1st ac|focus/i.test(r)) return 'Focus';
+    if (/ac\b|camera|steadicam|operator|clapper|loader/i.test(r)) return 'Camera';
+    if (/playback|vtr|video/i.test(r)) return 'Video';
+    return 'Other';
+  }
   function find(list, id) { return (list || []).filter(function (x) { return x.id === id; })[0]; }
 
   function translate(op, S) {
@@ -163,6 +174,25 @@
         { a: 'add', tab: 'crew', row: row, log: said }] };
     }
 
+    // Production (or Elliot) puts a name against a role that's missing. Elliot then gives them a link.
+    if (a === 'add_booking') {
+      if (!admin && !isProd(me)) return { error: 'Only production or Elliot books crew.' };
+      var bn = clean(op.name, 60), br = clean(op.role, 60);
+      if (!bn || !br) return { error: 'Name & role needed.' };
+      return { a: 'add', tab: 'bookings', log: 'booked ' + bn + ' as ' + br,
+        row: { name: bn, role: br, email: clean(op.email, 120), phone: clean(op.phone, 40), by: '@me', time: '@now' } };
+    }
+
+    if (a === 'give_booking') {
+      if (!admin) return { error: 'Only Elliot makes links.' };
+      var bk = find(S.bookings, op.id);
+      if (!bk) return { error: 'That booking has gone. Pull to refresh.' };
+      var made = translate({ a: 'add_crew', name: bk.name, role: bk.role, email: bk.email, phone: bk.phone, dept: deptFor(bk.role) }, S);
+      if (!made || made.error) return made;
+      var del = { a: 'del', tab: 'bookings', id: bk.id };
+      return { a: 'batch', ops: (made.a === 'batch' ? made.ops : [made]).concat([del]) };
+    }
+
     if (a === 'give_link') {
       if (!admin) return { error: 'Only Elliot makes links.' };
       if (S.v === 'pipe-1') return { error: 'Paste the new script first.' };
@@ -194,7 +224,7 @@
     return { error: 'Unknown action.' };
   }
 
-  var api = { translate: translate };
+  var api = { translate: translate, deptFor: deptFor };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HymnRules = api;
 })(this);

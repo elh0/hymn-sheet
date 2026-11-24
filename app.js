@@ -251,13 +251,18 @@
     });
     var noSup = S.items.filter(function (i) { return !i.supplier || same(i.supplier, 'TBC'); });
     if (noSup.length) out.push({ text: noSup.length + ' item' + (noSup.length > 1 ? 's' : '') + ' with no supplier: ' + noSup.slice(0, 4).map(function (i) { return i.item; }).join(', ') + (noSup.length > 4 ? '…' : ''), auto: 'nosupplier' });
+    needs().forEach(function (r) {
+      if (!bookedAs(r)) out.push({ text: 'No ' + r + ' booked yet. ' + bookers() + ' to book one?', auto: 'need', role: r });
+    });
+    if (S.me.admin) (S.bookings || []).forEach(function (b) {
+      out.push({ text: first(b.by) + ' booked ' + b.name + ' as ' + b.role + '. They need a link.', auto: 'booking', id: b.id });
+    });
     var roleless = {};
     S.items.concat(S.tasks).forEach(function (i) { var w = i.owner || i.who; if (isUnnamed(w)) (roleless[w] = roleless[w] || []).push(i.item || i.task); });
     Object.keys(roleless).forEach(function (w) {
       var l = roleless[w], got = bookedAs(w.replace(UNNAMED, ''));
       if (got) { out.push({ text: first(got.name) + ' is booked as ' + (got.role || 'crew').toLowerCase() + ' now. Put their name on: ' + l.slice(0, 3).join(', ') + (l.length > 3 ? '…' : ''), auto: 'unnamed' }); return; }
-      var booker = S.crew.filter(function (c) { return /production|producer|coordinator|\bpm\b/i.test(c.role || ''); }).map(function (c) { return first(c.name); });
-      out.push({ text: w.replace(UNNAMED, '') + ' not booked yet, so nobody\'s bringing: ' + l.slice(0, 3).join(', ') + (l.length > 3 ? '…' : '') + '. ' + (booker.length ? booker.join(' or ') : 'Production') + ' to book one?', auto: 'unnamed' });
+      out.push({ text: w.replace(UNNAMED, '') + ' not booked yet, so nobody\'s bringing: ' + l.slice(0, 3).join(', ') + (l.length > 3 ? '…' : '') + '. ' + bookers() + ' to book one?', auto: 'unnamed' });
     });
     var unc = S.items.filter(function (i) { return !i.confirmed; });
     if (unc.length) out.push({ text: unc.length + ' item' + (unc.length > 1 ? 's' : '') + ' not confirmed yet', auto: 'unconfirmed' });
@@ -336,7 +341,7 @@
       h += '<p><button class="link" data-act="editjob">' + (ui.editJob ? 'Close' : 'Edit job') + '</button></p>';
       if (ui.editJob) {
         h += '<form class="box" data-form="job">';
-        [['title', 'Title'], ['dates', 'Shoot'], ['call', 'Call'], ['location', 'Where'], ['prep', 'Prep'], ['notes', 'Note'], ['deck', 'Deck link']].forEach(function (f) {
+        [['title', 'Title'], ['dates', 'Shoot'], ['call', 'Call'], ['location', 'Where'], ['prep', 'Prep'], ['notes', 'Note'], ['deck', 'Deck link'], ['needs', 'Crew needed']].forEach(function (f) {
           h += '<label>' + f[1] + '<input name="' + f[0] + '" id="job_' + f[0] + '" value="' + esc(j[f[0]]) + '"></label>';
         });
         h += '<button type="submit">Save job</button></form>';
@@ -368,10 +373,21 @@
       if (x.manual && S.me.admin) h += '<button class="link" data-act="flag" data-id="' + esc(x.id) + '">Sorted</button>';
       if (x.auto === 'unconfirmed') h += '<button class="link" data-act="filter" data-f="unconfirmed">Show</button>';
       if (x.auto === 'nosupplier') h += '<button class="link" data-act="filter" data-f="nosupplier">Show</button>';
+      if (x.auto === 'need' && canBook()) h += '<button class="link" data-act="booknow" data-role="' + esc(x.role) + '">Add name</button>';
+      if (x.auto === 'booking') h += '<button class="link" data-act="givebooking" data-id="' + esc(x.id) + '">Give them a link</button>';
       h += '</li>';
     });
     if (all > 3) h += '<li><button class="link" data-act="allflags">' + (ui.allFlags ? 'Show fewer' : 'Show all ' + all) + '</button></li>';
-    return h + '</ol></section>';
+    h += '</ol>';
+    if (ui.booking) {
+      h += '<form class="box book" data-form="booking"><h2>Who\'s the ' + esc(ui.booking) + '?</h2><input type="hidden" name="role" value="' + esc(ui.booking) + '">';
+      [['name', 'Name'], ['phone', 'Phone'], ['email', 'Email']].forEach(function (f) {
+        h += '<label>' + f[1] + '<input name="' + f[0] + '" id="book_' + f[0] + '" data-keep="book_' + f[0] + '"' + (f[0] === 'email' ? ' type="email"' : f[0] === 'phone' ? ' type="tel"' : '') + '></label>';
+      });
+      h += '<div class="row"><button type="submit">Add to crew</button><button type="button" class="link" data-act="booknow">Cancel</button></div>';
+      h += '<p class="grey small">' + (S.me.admin ? 'They go straight on the crew with their own link.' : 'Elliot sends them their link.') + '</p></form>';
+    }
+    return h + '</section>';
   }
 
   function kitView() {
@@ -435,7 +451,15 @@
     'DIT': /\bdit\b|data/i, 'Steadicam op': /steadicam|operator|handheld/i, 'Playback': /playback|vtr|video/i, 'Production': /production|producer|coordinator|\bpm\b/i, 'Art dept': /\bart\b|designer|props/i };
   function isUnnamed(n) { return String(n || '').indexOf(UNNAMED) > 0; }
   // Someone on the crew already does this role (Mark, Gaffer).
-  function bookedAs(role) { var re = ROLE_MATCH[role]; return re ? S.crew.filter(function (c) { return re.test(c.role || ''); })[0] : null; }
+  function roleRe(role) { return ROLE_MATCH[role] || new RegExp(String(role).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); }
+  function bookedAs(role) {
+    var re = roleRe(role);
+    return S.crew.filter(function (c) { return re.test(c.role || ''); })[0] ||
+      (S.bookings || []).filter(function (b) { return re.test(b.role || ''); }).map(function (b) { return { name: b.name, role: b.role, pending: true }; })[0] || null;
+  }
+  function needs() { return String((S.job && S.job.needs) || '').split(/\s*,\s*/).filter(Boolean); }
+  function canBook() { return S.me.admin || /production|producer|coordinator|\bpm\b/i.test(S.me.role || ''); }
+  function bookers() { var b = S.crew.filter(function (c) { return /production|producer|coordinator|\bpm\b/i.test(c.role || ''); }).map(function (c) { return first(c.name); }); return b.length ? b.join(' or ') : 'Production'; }
   function crewOptions(cur) {
     var names = S.crew.map(function (c) { return c.name; }).concat(['Elliot']);
     var roles = OPEN_ROLES.filter(function (r) { return !bookedAs(r); }).map(function (r) { return r + UNNAMED; });
@@ -564,6 +588,11 @@
         }
         h += '</div>';
       }
+      h += '</div></li>';
+    });
+    (S.bookings || []).forEach(function (b) {
+      h += '<li class="person"><span class="dot"></span><div class="body"><div class="name">' + esc(b.name) + '</div><div class="meta"><span class="tag t-plain">' + esc(b.role) + '</span><span class="sep"> · </span><span class="tag t-yellow">booked by ' + esc(first(b.by)) + ', no link yet</span></div>';
+      if (S.me.admin) h += '<div class="row"><button class="link" data-act="givebooking" data-id="' + esc(b.id) + '">Give them a link</button></div>';
       h += '</div></li>';
     });
     h += '</ul>';
@@ -804,6 +833,8 @@
     if (a === 'askitem') { var ai = findItem(id); ui.askAbout = ai ? ai.item : ''; ui.askTo = ai && ai.owner && !same(ai.owner, S.me.name) ? ai.owner : 'Elliot'; ui.open = null; ui.tab = 'mine'; store('hymn_tab', 'mine'); render(); var af = document.getElementById('askform'); if (af) af.scrollIntoView(); var at = document.getElementById('ask_text'); if (at) at.focus(); return; }
     if (a === 'askclear') { ui.askAbout = ''; render(); return; }
     if (a === 'delask') { send({ a: 'delete_ask', id: id }, function () { S.asks = asks().filter(function (q) { return q.id !== id; }); }); return; }
+    if (a === 'booknow') { var br = t.getAttribute('data-role'); ui.booking = br && ui.booking !== br ? br : null; render(); var bn = document.getElementById('book_name'); if (bn) bn.focus(); return; }
+    if (a === 'givebooking') { send({ a: 'give_booking', id: id }); return; }
     if (a === 'gotit') { ui.dismissed = true; lastLook = Date.now(); markSeen(); render(); return; }
     if (a === 'tab') { ui.tab = t.getAttribute('data-t'); store('hymn_tab', ui.tab); render(); return; }
     if (a === 'editjob') { ui.editJob = !ui.editJob; render(); return; }
@@ -838,6 +869,13 @@
     delete v.supplier_other;
     function clear() { Array.prototype.forEach.call(f.querySelectorAll('[data-keep]'), function (el) { if (el.tagName === 'INPUT') el.value = ''; }); }
 
+    if (kind === 'booking') {
+      if (!v.name) return;
+      clear(); ui.booking = null;
+      if (S.me.admin) send({ a: 'add_crew', name: v.name, role: v.role, email: v.email, phone: v.phone, dept: window.HymnRules.deptFor ? window.HymnRules.deptFor(v.role) : 'Other' });
+      else send({ a: 'add_booking', name: v.name, role: v.role, email: v.email, phone: v.phone }, function () { S.bookings = (S.bookings || []).concat([{ id: 'tmp' + Date.now(), name: v.name, role: v.role, by: S.me.name }]); });
+      return;
+    }
     if (kind === 'sure') {
       var sp = ui.sure; ui.sure = null;
       if (!sp) return render();
