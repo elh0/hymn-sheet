@@ -46,7 +46,17 @@
     if (DESK) return 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) + '&su=' + encodeURIComponent(subject || '') + (body ? '&body=' + encodeURIComponent(body) : '');
     return 'mailto:' + to + '?subject=' + encodeURIComponent(subject || '') + (body ? '&body=' + encodeURIComponent(body) : '');
   }
-  function linkFor(k) { return location.origin + location.pathname + '?k=' + encodeURIComponent(k); }
+  // On crew.elliot.onl links read crew.elliot.onl/<job>?k=KEY (404.html serves the app for any path).
+  var NICE = location.hostname === 'crew.elliot.onl';
+  function linkFor(k) {
+    if (NICE && S && S.job && S.job.job) return location.origin + '/' + encodeURIComponent(S.job.job) + '?k=' + encodeURIComponent(k);
+    return location.origin + location.pathname + '?k=' + encodeURIComponent(k);
+  }
+  function tidyUrl() {
+    if (!NICE || !S || !S.job || !S.job.job || !key) return;
+    var want = '/' + encodeURIComponent(S.job.job);
+    if (location.pathname !== want) try { history.replaceState(null, '', want + '?k=' + encodeURIComponent(key)); } catch (e) {}
+  }
 
   /* ---------- server ---------- */
   function get() {
@@ -60,7 +70,7 @@
 
   function took(data) {
     if (data && data.error) { status = { text: data.error, bad: true }; return false; }
-    S = data; save('hymn_state_' + key, S); lastOk = Date.now();
+    S = data; save('hymn_state_' + key, S); lastOk = Date.now(); tidyUrl();
     status = { text: '', bad: false };
     return true;
   }
