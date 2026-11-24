@@ -201,10 +201,23 @@ async function uiTests() {
     var t = await page.textContent('.flags'); if (/Show all/.test(t)) { await page.click('[data-act=allflags]'); t = await page.textContent('.flags'); }
     assert(/no supplier: NDs/.test(t) && /not confirmed/.test(t), t);
   });
+  await check('phone: a tick asks first; Cancel changes nothing', async function () {
+    await page.click('[data-act=pack][data-id=i1]');
+    await page.waitForSelector('.sure');
+    assert(/Sony Venice 8\.6K w\/ Rialto packed/.test(await page.textContent('.sure')) && /undo/.test(await page.textContent('.sure')));
+    await page.click('[data-act=sureno]');
+    assert(!(await page.$('.sure')));
+    assert(!b.get({ a: 'state', k: 'ADMIN1' }).items[0].packed);
+  });
   await check('phone: tick packed saves to the sheet', async function () {
     await page.click('[data-act=pack][data-id=i1]');
+    await page.fill('#sure_note', 'In the case, both batteries');
+    await page.click('.sure button[type=submit]');
     await page.waitForFunction(function () { return !document.getElementById('status').classList.contains('show'); });
-    assert(/James Burns/.test(b.get({ a: 'state', k: 'ADMIN1' }).items[0].packed));
+    var st = b.get({ a: 'state', k: 'ADMIN1' });
+    assert(/James Burns/.test(st.items[0].packed));
+    assert(/In the case, both batteries/.test(st.items[0].notes), st.items[0].notes);
+    assert(st.log.some(function (l) { return /packed Sony Venice.*: In the case/.test(l.what); }));
   });
   await check('phone: add my kit', async function () {
     await page.click('[data-tab=mine]');
@@ -244,6 +257,7 @@ async function uiTests() {
     await page.click('[data-tab=kit]');
     b.down = true;
     await page.click('[data-act=pack][data-id=i2]');
+    await page.click('.sure button[type=submit]');
     await page.waitForFunction(function () { return /No signal/.test(document.getElementById('status').textContent); });
     assert(!b.get({ a: 'state', k: 'ADMIN1' }).items[1].packed);
     b.down = false;
@@ -266,6 +280,8 @@ async function uiTests() {
     await ep.click('[data-tab=kit]');
     var id = b.get({ a: 'state', k: 'ADMIN1' }).items.filter(function (i) { return i.item === 'Vaxis TX + 3 RX'; })[0].id;
     await ep.click('[data-act=confirm][data-id="' + id + '"]');
+    assert(/Vaxis TX \+ 3 RX confirmed/.test(await ep.textContent('.sure')));
+    await ep.click('.sure button[type=submit]');
     await ep.waitForFunction(function () { return !document.getElementById('status').classList.contains('show'); });
     assert(b.get({ a: 'state', k: 'ADMIN1' }).items.filter(function (i) { return i.id === id; })[0].confirmed);
   });

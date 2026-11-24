@@ -196,3 +196,16 @@ textarea:focus { outline: none; }
 .reply { display: flex; gap: 8px; margin-top: 6px; }
 .reply input { flex: 1; min-width: 0; }
 .reply button { flex: none; padding: 4px 10px; border-radius: 4px; background: var(--ink); color: var(--bg); font-size: 14px; }
+
+/* "you sure?" before a tick */
+.sure {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 25;
+  width: min(480px, calc(100% - 32px)); background: var(--bg); border: 1px solid var(--faint); border-radius: 8px;
+  padding: 14px 16px 12px; box-shadow: 0 8px 30px rgba(0,0,0,.2);
+}
+.sure p { margin: 0 0 4px; }
+.sure .row { margin-top: 10px; }
+.sure .yes { padding: 6px 14px; border-radius: 4px; background: var(--blue); color: #fff; font-size: 15px; }
+@media (max-width: 899px) { .sure { bottom: calc(70px + env(safe-area-inset-bottom)); } }
+.sure input { width: 100%; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--faint); border-radius: 4px; background: var(--hover); color: var(--ink); font-size: 16px; }
+.sure .grey.small { margin-top: 8px; }

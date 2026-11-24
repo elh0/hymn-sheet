@@ -286,7 +286,7 @@
     else if (ui.tab === 'crew') h += crewView();
     else if (ui.tab === 'notes' || ui.tab === 'shots') h += notesView() + shotsView();
     else h += logView();
-    h += '</main><footer>Elliot Holbrow · DP</footer></div><div id="status"></div>';
+    h += '</main><footer>Elliot Holbrow · DP</footer></div>' + sureBar() + '<div id="status"></div>';
     root.innerHTML = h;
 
     Object.keys(forms).forEach(function (k) { var el = root.querySelector('[data-keep="' + k + '"]'); if (el) el.value = forms[k]; });
@@ -489,7 +489,7 @@
   function taskRow(t) {
     var h = '<li class="item' + (t.done ? ' packed' : '') + '">';
     h += '<button class="box' + (t.done ? ' on' : '') + '" data-act="task" data-id="' + esc(t.id) + '">' + (t.done ? '×' : '') + '</button>';
-    h += '<div class="body"><div class="name">' + esc(t.task) + '</div><div class="meta">' + esc(t.who) + (t.due ? ' · by ' + esc(t.due) : '') + (t.done ? ' · done ' + esc(t.done.split(' · ')[1] || '') : '') + '</div></div>';
+    h += '<div class="body"><div class="name">' + esc(t.task) + '</div><div class="meta">' + esc(t.who) + (t.due ? ' · by ' + esc(t.due) : '') + (t.done ? ' · done ' + esc(t.done.split(' · ')[1] || '') : '') + '</div>' + (t.notes ? '<div class="meta">' + esc(t.notes) + '</div>' : '') + '</div>';
     if (S.me.admin) h += '<button class="tick" data-act="deltask" data-id="' + esc(t.id) + '">×</button>';
     return h + '</li>';
   }
@@ -734,6 +734,28 @@
   /* ---------- events ---------- */
   function findItem(id) { return S.items.filter(function (i) { return i.id === id; })[0]; }
   function stamp() { return S.me.name + ' · now'; }
+  function doTick(a, id, note) {
+    if (a === 'task') { return send({ a: 'tick_task', id: id, note: note }, function () { var k = S.tasks.filter(function (x) { return x.id === id; })[0]; k.done = k.done ? '' : stamp(); if (note) k.notes = (k.notes ? k.notes + ' · ' : '') + note; }); return; }
+    var field = a === 'pack' ? 'packed' : 'confirmed';
+    return send({ a: 'tick_item', id: id, field: field, note: note }, function () { var i = findItem(id); i[field] = i[field] ? '' : stamp(); if (note) i.notes = (i.notes ? i.notes + ' · ' : '') + note; });
+  }
+  // Tapping a tick opens a small card: "NDs confirmed" + an optional note, so ticking feels like logging it, not a scary button.
+  function tickInfo(p) {
+    var t, on, name;
+    if (p.a === 'task') { t = S.tasks.filter(function (x) { return x.id === p.id; })[0]; if (!t) return null; on = !!t.done; name = t.task; }
+    else { t = findItem(p.id); if (!t) return null; on = !!t[p.a === 'pack' ? 'packed' : 'confirmed']; name = t.item; }
+    var word = p.a === 'task' ? (on ? 'reopened' : 'done') : p.a === 'pack' ? (on ? 'not packed' : 'packed') : (on ? 'not confirmed' : 'confirmed');
+    return { on: on, name: name, word: word };
+  }
+  function sureBar() {
+    var p = ui.sure; if (!p) return '';
+    var x = tickInfo(p); if (!x) return '';
+    var h = '<form class="sure" data-form="sure" role="dialog"><p><b>' + esc(x.name) + '</b> ' + esc(x.word) + '</p>';
+    if (!x.on) h += '<input name="note" id="sure_note" data-keep="sure_note" autocomplete="off" placeholder="Add a note (optional)">';
+    h += '<div class="row"><button type="submit" class="yes">' + (x.on ? 'Undo it' : 'Log it') + '</button><button type="button" class="link" data-act="sureno">Cancel</button></div>';
+    h += '<p class="grey small">Goes on the Log with your name. Tap again any time to undo.</p></form>';
+    return h;
+  }
 
   root.addEventListener('click', function (e) {
     if (e.target.closest('a')) return; // links (call, email, WhatsApp) just open
@@ -769,13 +791,12 @@
     if (a === 'addcrew') { ui.addCrew = !ui.addCrew; render(); return; }
     if (a === 'crewopen') { var n = +t.getAttribute('data-n'); ui.crewOpen = ui.crewOpen === n ? null : n; render(); return; }
     if (a === 'copy') { copy(t.getAttribute('data-text')); t.textContent = 'Copied'; return; }
-    if (a === 'pack' || a === 'confirm') {
-      var field = a === 'pack' ? 'packed' : 'confirmed';
-      send({ a: 'tick_item', id: id, field: field }, function () { var i = findItem(id); i[field] = i[field] ? '' : stamp(); });
-      return;
+    if (a === 'pack' || a === 'confirm' || a === 'task') {
+      ui.sure = { a: a, id: id }; render(); return;
     }
+    if (a === 'sureno') { ui.sure = null; render(); return; }
+
     if (a === 'delitem') { send({ a: 'delete_item', id: id }, function () { S.items = S.items.filter(function (i) { return i.id !== id; }); ui.open = null; }); return; }
-    if (a === 'task') { send({ a: 'tick_task', id: id }, function () { var k = S.tasks.filter(function (x) { return x.id === id; })[0]; k.done = k.done ? '' : stamp(); }); return; }
     if (a === 'deltask') { send({ a: 'delete_task', id: id }, function () { S.tasks = S.tasks.filter(function (x) { return x.id !== id; }); }); return; }
     if (a === 'kitdone') { send({ a: 'kit_done' }, function () { var c = S.crew.filter(function (x) { return same(x.name, S.me.name); })[0]; if (c) c.kit_done = c.kit_done ? '' : 'now'; }); return; }
     if (a === 'flag') { send({ a: 'resolve_flag', id: id }, function () { var f = S.flags.filter(function (x) { return x.id === id; })[0]; if (f) f.status = 'sorted'; }); return; }
@@ -798,6 +819,18 @@
     delete v.supplier_other;
     function clear() { Array.prototype.forEach.call(f.querySelectorAll('[data-keep]'), function (el) { if (el.tagName === 'INPUT') el.value = ''; }); }
 
+    if (kind === 'sure') {
+      var sp = ui.sure; ui.sure = null;
+      if (!sp) return render();
+      var sx = tickInfo(sp);
+      var done = sx ? sx.name + ' ' + sx.word : '';
+      doTick(sp.a, sp.id, v.note).then(function () {
+        if (!done || status.bad || queue.length) return;
+        status = { text: done, bad: false }; paintStatus();
+        setTimeout(function () { if (status.text === done) { status = { text: '', bad: false }; paintStatus(); } }, 2000);
+      });
+      return;
+    }
     if (kind === 'add') {
       if (!v.item) return;
       var tmp = { id: 'tmp' + Date.now(), item: v.item, qty: v.qty, dept: v.dept, supplier: v.supplier || 'TBC', asked_by: S.me.name, owner: S.me.name, notes: v.notes, confirmed: '', packed: '' };

@@ -66,7 +66,9 @@
       if (!ti) return { error: 'That item has gone. Pull to refresh.' };
       var field = op.field === 'confirmed' ? 'confirmed' : 'packed';
       var tf = { updated: '@now' }; tf[field] = '@toggle';
-      return { a: 'set', tab: 'items', id: ti.id, fields: tf, log: (ti[field] ? 'un' : '') + field + ' ' + ti.item };
+      var tn = clean(op.note, 300);
+      if (tn) tf.notes = (ti.notes ? ti.notes + ' · ' : '') + tn;
+      return { a: 'set', tab: 'items', id: ti.id, fields: tf, log: (ti[field] ? 'un' : '') + field + ' ' + ti.item + (tn ? ': ' + tn : '') };
     }
 
     if (a === 'delete_item') {
@@ -86,8 +88,10 @@
     if (a === 'tick_task') {
       var t = find(S.tasks, op.id);
       if (!t) return { error: 'That task has gone. Pull to refresh.' };
-      return { a: 'set', tab: 'tasks', id: t.id, fields: { done: '@toggle', updated: '@now' },
-        log: (t.done ? 'reopened: ' : 'done: ') + t.task + (same(t.who, me.name) ? '' : ' (' + t.who + '\'s)') };
+      var dn = clean(op.note, 300), df = { done: '@toggle', updated: '@now' };
+      if (dn) df.notes = (t.notes ? t.notes + ' · ' : '') + dn;
+      return { a: 'set', tab: 'tasks', id: t.id, fields: df,
+        log: (t.done ? 'reopened: ' : 'done: ') + t.task + (same(t.who, me.name) ? '' : ' (' + t.who + '\'s)') + (dn ? ': ' + dn : '') };
     }
 
     if (a === 'delete_task') {
