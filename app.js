@@ -298,6 +298,7 @@
     h += '<label>Notes<input name="notes" id="ed_notes" value="' + esc(i.notes) + '"></label>';
     h += '<p class="grey small">Asked by ' + esc(i.asked_by || '-') + (i.source && i.source !== 'app' ? ' · from ' + esc(i.source) : '') + (i.confirmed ? ' · confirmed ' + esc(i.confirmed) : '') + (i.packed ? ' · packed ' + esc(i.packed) : '') + '</p>';
     h += '<div class="row"><button type="submit">Save</button>';
+    h += '<a class="btn ask" target="_blank" rel="noopener" href="' + esc(askAbout(i)) + '">Ask about this</a>';
     h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(mailto(S.crew.map(function (c) { return c.email; }), S.job.title + ': ' + i.item, i.item + (i.qty ? ' x' + i.qty : '') + '\n\n')) + '">Email crew</a>';
     if (S.me.admin || (same(i.asked_by, S.me.name) && !i.confirmed)) h += '<button type="button" class="link red" data-act="delitem" data-id="' + esc(i.id) + '">Remove</button>';
     h += '</div></form></li>';
@@ -331,7 +332,8 @@
       h += '<section><h2>My kit <span class="grey">(' + mi.length + ')</span></h2>';
       h += '<ul class="items">' + mi.map(itemRow).join('') + '</ul>';
       h += addItemBlock();
-      h += '<p class="gap"><button class="wide' + (meRow.kit_done ? ' on' : '') + '" data-act="kitdone">' + (meRow.kit_done ? 'My kit is all on the sheet · ' + esc(meRow.kit_done) : 'I\'ve added all my kit') + '</button></p></section>';
+      h += '<p class="gap"><button class="wide' + (meRow.kit_done ? ' on' : '') + '" data-act="kitdone">' + (meRow.kit_done ? 'My kit is all on the sheet · ' + esc(meRow.kit_done) : 'I\'ve added all my kit') + '</button></p>';
+      h += '<p><a class="btn wide-btn update" target="_blank" rel="noopener" href="' + esc(myUpdate()) + '">Send my update</a></p></section>';
     } else {
       h += taskAdder();
     }
@@ -476,6 +478,43 @@
     if (c.key) { L.push('Everything\'s on here, tick stuff off as it\'s sorted:'); L.push(linkFor(c.key)); L.push(''); }
     L.push('Thanks!'); L.push('Elliot');
     return mailto([c.email], S.job.title + ' x ' + first(c.name), L.join('\n'));
+  }
+
+  /* Suggested emails for anyone on the sheet. They open in the person's own mail, ready to edit & send. */
+  function production() { return S.crew.filter(function (c) { return /production manager|producer|coordinator|\bpm\b/i.test(c.role || '') && c.email; }); }
+  function dpEmail() { return window.HYMN_DP_EMAIL || ''; }
+  function supplierContact(sup) { return S.crew.filter(function (c) { return c.email && sup && same(c.role, sup); })[0]; }
+
+  function askAbout(i) {
+    var prod = production(), sup = supplierContact(i.supplier);
+    var to = (sup ? [sup] : []).concat(prod.slice(0, 1));
+    var names = to.map(function (c) { return first(c.name); });
+    var L = ['Hey ' + (names.length ? names.join(' & ') : 'all') + ',', ''];
+    var what = i.item + (i.qty && i.qty !== '1' ? ' x' + i.qty : '');
+    if (!i.supplier || same(i.supplier, 'TBC')) L.push('Who\'s supplying the ' + what + ' for ' + S.job.title + ' (' + S.job.dates + ')? It hasn\'t got a supplier yet.');
+    else L.push('Can we confirm the ' + what + ' from ' + i.supplier + ' for ' + S.job.title + ' (' + S.job.dates + ')?');
+    if (i.notes) L.push('', 'Note: ' + i.notes);
+    L.push('', 'Thanks!', S.me.name);
+    var cc = S.me.admin ? [] : [dpEmail()];
+    return mailto(to.map(function (c) { return c.email; }).concat(cc), S.job.title + ': ' + what, L.join('\n'));
+  }
+
+  function myUpdate() {
+    var prod = production();
+    var to = (S.me.admin ? [] : [dpEmail()]).concat(prod.map(function (c) { return c.email; }));
+    var names = (S.me.admin ? [] : ['Elliot']).concat(prod.map(function (c) { return first(c.name); }));
+    var L = ['Hey ' + (names.length ? names.join(' & ') : 'all') + ',', '', 'Quick update for ' + S.job.title + ':', ''];
+    var t = myTasks(), done = t.filter(function (x) { return x.done; }), open = t.filter(function (x) { return !x.done; });
+    if (done.length) { L.push('Done:'); done.forEach(function (x) { L.push('- ' + x.task); }); L.push(''); }
+    var k = myItems();
+    if (k.length) {
+      L.push('My kit:');
+      k.forEach(function (i) { L.push('- ' + i.item + (i.qty && i.qty !== '1' ? ' x' + i.qty : '') + ' (' + (!i.supplier || same(i.supplier, 'TBC') ? 'no supplier yet' : i.supplier) + (i.confirmed ? ', confirmed' : ', not confirmed') + (i.packed ? ', packed' : '') + ')'); });
+      L.push('');
+    }
+    if (open.length) { L.push('Still to do:'); open.forEach(function (x) { L.push('- ' + x.task + (x.due ? ' (by ' + x.due + ')' : '')); }); L.push(''); }
+    L.push('It\'s all on the Hymn Sheet too.', '', 'Thanks!', S.me.name);
+    return mailto(to, S.job.title + ': update from ' + first(S.me.name), L.join('\n'));
   }
 
   function shotsView() {

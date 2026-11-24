@@ -10,6 +10,8 @@ function seed() {
     ['jobs', { job: 'other', title: 'Other Job', admin_key: 'ADMIN2' }],
     ['crew', { job: 'test', key: 'JAMES1', name: 'James Burns', role: '2nd AC', dept: 'Camera', email: 'j@x.com', phone: '07500 000000' }],
     ['crew', { job: 'test', key: 'MILO1', name: 'Milo Brown', role: '1st AC', dept: 'Focus', email: 'm@x.com' }],
+    ['crew', { job: 'test', key: 'LOUIS1', name: 'Louis Jones', role: 'Production manager', dept: 'Other', email: 'l@x.com' }],
+    ['crew', { job: 'test', key: 'MCX1', name: 'Aduke', role: 'MCX', dept: 'Other', email: 'a@x.com' }],
     ['crew', { job: 'test', key: 'DAVO1', name: 'Davo', role: 'DIT', dept: 'DIT', email: 'd@x.com' }],
     ['crew', { job: 'other', key: 'OTHER1', name: 'Someone', role: 'Gaffer' }],
     ['items', { id: 'i1', job: 'test', dept: 'Camera', item: 'Sony Venice 8.6K w/ Rialto', qty: '1', supplier: 'MCX', asked_by: 'Elliot', owner: 'James Burns', confirmed: 'Elliot · 24 Nov 10:00' }],
@@ -177,6 +179,18 @@ async function uiTests() {
     await page.click('[data-tab=crew]'); await page.click('.crew [data-n="1"]');
     assert(/^mailto:m@x\.com/.test(await page.getAttribute('.crew .contact a[href^="mailto:"]', 'href')));
     await page.click('[data-tab=kit]');
+  });
+  await check('phone: Send my update goes to Elliot & production with my kit', async function () {
+    await page.click('[data-tab=mine]');
+    var href = decodeURIComponent(await page.getAttribute('a.update', 'href'));
+    assert(/^mailto:dp@x\.com,l@x\.com/.test(href) && /Hey Elliot & Louis/.test(href) && /Vaxis TX \+ 3 RX/.test(href), href);
+  });
+  await check('phone: Ask about this goes to the supplier contact & production', async function () {
+    await page.click('[data-tab=kit]');
+    await page.click('[data-act=openitem][data-id=i1]');
+    var href = decodeURIComponent(await page.getAttribute('a.ask', 'href'));
+    assert(/^mailto:a@x\.com,l@x\.com,dp@x\.com/.test(href) && /Hey Aduke & Louis/.test(href) && /confirm the Sony Venice 8\.6K w\/ Rialto from MCX/.test(href), href);
+    await page.click('[data-act=openitem][data-id=i1]');
   });
   await check('phone: Notes tab shows the DP notes', async function () {
     await page.click('[data-tab=notes]');

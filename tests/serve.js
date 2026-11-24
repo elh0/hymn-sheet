@@ -16,7 +16,7 @@ module.exports = function serve(backend, port) {
       });
       return;
     }
-    if (u.pathname === '/config.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); return res.end("window.HYMN_API = '/api';"); }
+    if (u.pathname === '/config.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); return res.end("window.HYMN_API = '/api'; window.HYMN_DP_EMAIL = 'dp@x.com';"); }
     var f = path.join(root, u.pathname === '/' ? 'index.html' : u.pathname);
     if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
     res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'text/plain' });
