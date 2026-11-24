@@ -8,7 +8,7 @@
  */
 
 var TABS = {
-  jobs:  ['job', 'title', 'dates', 'call', 'location', 'prep', 'deck', 'admin_key', 'notes'],
+  jobs:  ['job', 'title', 'dates', 'call', 'location', 'prep', 'deck', 'admin_key', 'notes', 'dp_notes'],
   crew:  ['job', 'key', 'name', 'role', 'dept', 'email', 'phone', 'kit_done', 'added'],
   items: ['id', 'job', 'dept', 'item', 'qty', 'supplier', 'asked_by', 'owner', 'confirmed', 'packed', 'notes', 'source', 'updated'],
   tasks: ['id', 'job', 'who', 'task', 'due', 'done', 'updated'],
@@ -162,7 +162,7 @@ function state(me, live) {
     me: { name: me.name, role: me.role, admin: me.admin },
     job: {
       job: j, title: me.job.title, dates: me.job.dates, call: me.job.call,
-      location: me.job.location, prep: me.job.prep, deck: me.job.deck, notes: me.job.notes
+      location: me.job.location, prep: me.job.prep, deck: me.job.deck, notes: me.job.notes, dp_notes: me.job.dp_notes || ''
     },
     crew: crew.map(function (c) {
       var s = seenRows.filter(function (x) { return x.key === c.key; })[0] || {};
@@ -332,9 +332,11 @@ function act(a, p, me) {
     if (!me.admin) return { error: 'Only Elliot edits the job.' };
     var jr = rows('jobs').filter(function (x) { return x.job === j; })[0];
     var jch = {}, js = [];
-    ['title', 'dates', 'call', 'location', 'prep', 'deck', 'notes'].forEach(function (f) {
-      if (p.fields && p.fields[f] !== undefined && clean(p.fields[f], 400) !== jr[f]) {
-        jch[f] = clean(p.fields[f], 400); js.push(f + ' → "' + jch[f] + '"');
+    ['title', 'dates', 'call', 'location', 'prep', 'deck', 'notes', 'dp_notes'].forEach(function (f) {
+      var max = f === 'dp_notes' ? 20000 : 400;
+      if (p.fields && p.fields[f] !== undefined && clean(p.fields[f], max) !== (jr[f] || '')) {
+        jch[f] = clean(p.fields[f], max);
+        js.push(f === 'dp_notes' ? 'DP notes updated' : f + ' → "' + jch[f] + '"');
       }
     });
     if (!js.length) return null;

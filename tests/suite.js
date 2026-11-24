@@ -6,10 +6,11 @@ var pw; try { pw = require('playwright'); } catch (e) { pw = require('/usr/local
 
 function seed() {
   return makeBackend([
-    ['jobs', { job: 'test', title: 'Test Job', dates: 'Thu 26 Nov', call: '07:00', location: 'Deptford', prep: 'James, MCX Wed 12:00', admin_key: 'ADMIN1' }],
+    ['jobs', { job: 'test', title: 'Test Job', dates: 'Thu 26 Nov', call: '07:00', location: 'Deptford', prep: 'James, MCX Wed 12:00', admin_key: 'ADMIN1', dp_notes: '## Camera & codecs\n- Venice 8.6K full res\n\n## Light\n- 20x book light' }],
     ['jobs', { job: 'other', title: 'Other Job', admin_key: 'ADMIN2' }],
     ['crew', { job: 'test', key: 'JAMES1', name: 'James Burns', role: '2nd AC', dept: 'Camera', email: 'j@x.com', phone: '07500 000000' }],
     ['crew', { job: 'test', key: 'MILO1', name: 'Milo Brown', role: '1st AC', dept: 'Focus', email: 'm@x.com' }],
+    ['crew', { job: 'test', key: 'DAVO1', name: 'Davo', role: 'DIT', dept: 'DIT', email: 'd@x.com' }],
     ['crew', { job: 'other', key: 'OTHER1', name: 'Someone', role: 'Gaffer' }],
     ['items', { id: 'i1', job: 'test', dept: 'Camera', item: 'Sony Venice 8.6K w/ Rialto', qty: '1', supplier: 'MCX', asked_by: 'Elliot', owner: 'James Burns', confirmed: 'Elliot · 24 Nov 10:00' }],
     ['items', { id: 'i2', job: 'test', dept: 'Camera', item: 'NDs', supplier: 'TBC', asked_by: 'Elliot' }],
@@ -69,8 +70,8 @@ async function backendTests() {
     assert(!b.get({ a: 'state', k: h.key }).error);
   });
   await check('phone numbers keep their +', function () {
-    b.post(JSON.stringify({ a: 'add_crew', k: 'ADMIN1', name: 'Davo', phone: '+44 7796 000000' }));
-    var d = b.get({ a: 'state', k: 'ADMIN1' }).crew.filter(function (c) { return c.name === 'Davo'; })[0];
+    b.post(JSON.stringify({ a: 'add_crew', k: 'ADMIN1', name: 'Phone Test', phone: '+44 7796 000000' }));
+    var d = b.get({ a: 'state', k: 'ADMIN1' }).crew.filter(function (c) { return c.name === 'Phone Test'; })[0];
     assert.strictEqual(d.phone, '+44 7796 000000');
   });
   await check('presence: opening the link shows online', function () {
@@ -176,6 +177,27 @@ async function uiTests() {
     await page.click('[data-tab=crew]'); await page.click('.crew [data-n="1"]');
     assert(/^mailto:m@x\.com/.test(await page.getAttribute('.crew .contact a[href^="mailto:"]', 'href')));
     await page.click('[data-tab=kit]');
+  });
+  await check('phone: Notes tab shows the DP notes', async function () {
+    await page.click('[data-tab=notes]');
+    var t = await page.textContent('main');
+    assert(/Camera & codecs/.test(t) && /Venice 8.6K full res/.test(t) && /Rickshaw in low/.test(t), t.slice(0, 200));
+    await page.click('[data-tab=kit]');
+  });
+  await check('desktop: Message Davo drafts his codecs section, not the light', async function () {
+    await ep.click('[data-tab=crew]');
+    var n = await ep.evaluate(function () { var x = [].slice.call(document.querySelectorAll('.crew .body .name')).findIndex(function (e) { return e.textContent === 'Davo'; }); return x - 1; });
+    await ep.click('.crew [data-n="' + n + '"]');
+    var href = decodeURIComponent(await ep.getAttribute('.crew a.msg', 'href'));
+    assert(/Camera & codecs:/.test(href) && /Venice 8\.6K full res/.test(href) && !/book light/.test(href) && /k=DAVO1/.test(href), href);
+  });
+  await check('desktop: Elliot edits the DP notes', async function () {
+    await ep.click('[data-tab=notes]');
+    await ep.click('[data-act=editnotes]');
+    await ep.fill('#dp_notes', '## Camera & codecs\n- Venice 8.6K X-OCN');
+    await ep.click('form[data-form=notes] button[type=submit]');
+    await ep.waitForFunction(function () { return !document.getElementById('status').classList.contains('show'); });
+    assert(/X-OCN/.test(b.get({ a: 'state', k: 'JAMES1' }).job.dp_notes));
   });
   await check('phone: sees Elliot\'s confirm within a poll', async function () {
     await page.evaluate(function () { document.dispatchEvent(new Event('visibilitychange')); });

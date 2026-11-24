@@ -149,7 +149,7 @@
     if (ui.tab === 'kit') h += kitView();
     else if (ui.tab === 'mine') h += mineView();
     else if (ui.tab === 'crew') h += crewView();
-    else if (ui.tab === 'shots') h += shotsView();
+    else if (ui.tab === 'notes' || ui.tab === 'shots') h += notesView() + shotsView();
     else h += logView();
     h += '</main><footer>Elliot Holbrow · DP</footer></div><div id="status"></div>';
     root.innerHTML = h;
@@ -200,12 +200,12 @@
 
   function tabs() {
     var flags = openFlags().length;
-    var t = [['kit', 'Kit'], ['mine', 'Mine'], ['crew', 'Crew'], ['shots', 'Shots'], ['log', 'Log']];
+    var t = [['kit', 'Kit'], ['mine', 'Mine'], ['notes', 'Notes'], ['crew', 'Crew'], ['log', 'Log']];
     return '<nav>' + t.map(function (x) {
       var extra = '';
       if (x[0] === 'mine') { var open = myTasks().filter(function (k) { return !k.done; }).length; if (open) extra = ' (' + open + ')'; }
       if (x[0] === 'kit' && flags) extra = ' <span class="red">(' + flags + ')</span>';
-      return '<button class="' + (ui.tab === x[0] ? 'on' : '') + '" data-tab="' + x[0] + '">' + x[1] + extra + '</button>';
+      return '<button class="' + (ui.tab === x[0] || (x[0] === 'notes' && ui.tab === 'shots') ? 'on' : '') + '" data-tab="' + x[0] + '">' + x[1] + extra + '</button>';
     }).join('') + '</nav>';
   }
 
@@ -380,6 +380,7 @@
         if (c.email) h += '<a target="_blank" rel="noopener" href="' + esc(mailto([c.email], S.job.title)) + '">' + esc(c.email) + '</a>';
         if (S.me.admin && c.key) {
           var link = linkFor(c.key);
+          if (c.email) h += '<div class="row"><a class="btn msg" target="_blank" rel="noopener" href="' + esc(messageFor(c)) + '">Message ' + esc(first(c.name)) + '</a></div>';
           h += '<div class="row"><button class="link" data-act="copy" data-text="' + esc(link) + '">Copy link</button>';
           h += '<a class="link" target="_blank" rel="noopener" href="https://wa.me/' + esc((c.phone || '').replace(/[^\d]/g, '').replace(/^0/, '44')) + '?text=' + encodeURIComponent('hey ' + first(c.name).toLowerCase() + ', everything for ' + S.job.title + ' is on here, kit, tasks & crew. add your kit & tick stuff off as it\'s sorted:\n\n' + link) + '">WhatsApp link</a>';
           if (c.email) h += '<a class="link" target="_blank" rel="noopener" href="' + esc(mailto([c.email], S.job.title + ': Hymn Sheet', 'Hey ' + first(c.name) + ',\n\nEverything for ' + S.job.title + ' is on here: kit, tasks & crew. Add your kit & tick stuff off as it\'s sorted:\n\n' + link + '\n\nThanks!\nElliot')) + '">Email link</a></div>';
@@ -406,8 +407,79 @@
     return h;
   }
 
+  /* DP notes: plain text in the Sheet. "## Heading" starts a section, "- " is a bullet. */
+  function sections() {
+    var out = [], cur = null;
+    String(S.job.dp_notes || '').split(/\r?\n/).forEach(function (line) {
+      var m = line.match(/^#{1,3}\s+(.*)/);
+      if (m) { cur = { title: m[1].trim(), lines: [] }; out.push(cur); return; }
+      if (!cur) { cur = { title: '', lines: [] }; out.push(cur); }
+      cur.lines.push(line);
+    });
+    out.forEach(function (x) { while (x.lines.length && !x.lines[x.lines.length - 1].trim()) x.lines.pop(); while (x.lines.length && !x.lines[0].trim()) x.lines.shift(); });
+    return out.filter(function (x) { return x.title || x.lines.length; });
+  }
+
+  function notesView() {
+    var h = '';
+    if (S.me.admin && ui.editNotes) {
+      h += '<section><form class="box notes-edit" data-form="notes"><h2>DP notes</h2>';
+      h += '<p class="grey small">"## Heading" starts a section, "- " makes a bullet. Crew see this; Message drafts pull the right sections.</p>';
+      h += '<textarea name="dp_notes" id="dp_notes" rows="18">' + esc(S.job.dp_notes) + '</textarea>';
+      h += '<div class="row"><button type="submit">Save notes</button><button type="button" class="link" data-act="editnotes">Cancel</button></div></form></section>';
+      return h;
+    }
+    var secs = sections();
+    if (!secs.length) h += '<p class="grey gap">No DP notes yet.</p>';
+    secs.forEach(function (x) {
+      h += '<section class="note-sec">' + (x.title ? '<h2>' + esc(x.title) + '</h2>' : '') + '<div class="doc">';
+      var list = false;
+      x.lines.forEach(function (l) {
+        var b = l.match(/^\s*[-•]\s+(.*)/);
+        if (b && !list) { h += '<ul class="bul">'; list = true; }
+        if (!b && list) { h += '</ul>'; list = false; }
+        if (b) h += '<li>' + linkify(b[1]) + '</li>';
+        else if (l.trim()) h += '<p>' + linkify(l) + '</p>';
+      });
+      if (list) h += '</ul>';
+      h += '</div></section>';
+    });
+    if (S.job.deck) h += '<p class="gap"><a class="btn" target="_blank" rel="noopener" href="' + esc(S.job.deck) + '">Deck (diagrams & look)</a></p>';
+    if (S.me.admin) h += '<p class="gap"><button class="wide" data-act="editnotes">Edit DP notes</button></p>';
+    return h;
+  }
+
+  function linkify(t) { return esc(t).replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a target="_blank" rel="noopener" href="' + u + '">' + u + '</a>'; }); }
+
+  // Which notes sections matter to which department.
+  var DEPT_WORDS = {
+    Camera: ['camera', 'codec', 'lens', 'move', 'rig', 'look'], Focus: ['camera', 'codec', 'lens', 'move', 'rig'],
+    Video: ['monitor', 'playback', 'video', 'camera', 'codec'], DIT: ['codec', 'camera', 'data', 'dit', 'look', 'monitor', 'playback'],
+    Grip: ['move', 'grip', 'rig', 'rickshaw'], Lighting: ['light', 'look'], Director: ['look', 'move', 'shot'], Other: ['playback', 'schedule']
+  };
+  function sectionsFor(c) {
+    var words = (DEPT_WORDS[c.dept] || []).concat(String(c.role || '').toLowerCase().split(/[^a-z]+/).filter(function (w) { return w.length > 2; }));
+    return sections().filter(function (x) {
+      var t = x.title.toLowerCase();
+      return x.title && words.some(function (w) { return t.indexOf(w) >= 0; });
+    });
+  }
+
+  // A ready-to-send email to one person: their open tasks, their open kit, and the notes for their department.
+  function messageFor(c) {
+    var L = ['Hey ' + first(c.name) + ',', ''];
+    var t = tasksOf(c.name).filter(function (x) { return !x.done; });
+    if (t.length) { L.push('Your bits for ' + S.job.title + ':'); t.forEach(function (x) { L.push('- ' + x.task + (x.due ? ' (by ' + x.due + ')' : '')); }); L.push(''); }
+    var k = S.items.filter(function (i) { return (same(i.owner, c.name) || same(i.asked_by, c.name)) && (!i.confirmed || !i.supplier || same(i.supplier, 'TBC')); });
+    if (k.length) { L.push('Still open on your kit:'); k.forEach(function (i) { L.push('- ' + i.item + ': ' + (!i.supplier || same(i.supplier, 'TBC') ? 'no supplier yet' : 'not confirmed yet')); }); L.push(''); }
+    sectionsFor(c).forEach(function (x) { L.push(x.title + ':'); x.lines.forEach(function (l) { if (l.trim()) L.push(l.replace(/^\s*•\s+/, '- ')); }); L.push(''); });
+    if (c.key) { L.push('Everything\'s on here, tick stuff off as it\'s sorted:'); L.push(linkFor(c.key)); L.push(''); }
+    L.push('Thanks!'); L.push('Elliot');
+    return mailto([c.email], S.job.title + ' x ' + first(c.name), L.join('\n'));
+  }
+
   function shotsView() {
-    if (!S.shots.length) return '<p class="grey gap">No shot list yet.</p>';
+    if (!S.shots.length) return '';
     return '<section><h2>Shot list <span class="grey">(' + S.shots.length + ')</span></h2><ol class="shots">' + S.shots.map(function (s) {
       return '<li><span class="no">' + esc(s.no) + '</span><div><div class="name">' + esc(s.shot) + '</div>' + (s.notes ? '<div class="meta">' + esc(s.notes) + '</div>' : '') + '</div></li>';
     }).join('') + '</ol></section>';
@@ -432,6 +504,7 @@
     if (a === 'filter') { ui.filter = ui.filter === t.getAttribute('data-f') ? 'all' : t.getAttribute('data-f'); ui.tab = 'kit'; render(); return; }
     if (a === 'openitem') { ui.open = ui.open === id ? null : id; render(); return; }
     if (a === 'adding') { ui.adding = !ui.adding; render(); var f = document.getElementById('add_item'); if (f) f.focus(); return; }
+    if (a === 'editnotes') { ui.editNotes = !ui.editNotes; render(); return; }
     if (a === 'allflags') { ui.allFlags = !ui.allFlags; render(); return; }
     if (a === 'editjob') { ui.editJob = !ui.editJob; render(); return; }
     if (a === 'addcrew') { ui.addCrew = !ui.addCrew; render(); return; }
@@ -487,6 +560,10 @@
       if (!v.name) return;
       clear(); ui.addCrew = false;
       send({ a: 'add_crew', name: v.name, role: v.role, email: v.email, phone: v.phone, dept: v.dept });
+    } else if (kind === 'notes') {
+      ui.editNotes = false;
+      var txt = f.querySelector('textarea').value;
+      send({ a: 'set_job', fields: { dp_notes: txt } }, function () { S.job.dp_notes = txt; });
     } else if (kind === 'job') {
       ui.editJob = false;
       send({ a: 'set_job', fields: v }, function () { Object.keys(v).forEach(function (k) { S.job[k] = v[k]; }); });
