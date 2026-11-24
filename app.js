@@ -92,7 +92,13 @@
   }
 
   // Changes go into a queue first, so ticks made with no signal are sent later.
+  // rules.js turns the change into a plain Sheet op (before the screen updates,
+  // so it sees what was there); the backend only checks keys.
+  var PIPE = { add: 1, set: 1, del: 1, batch: 1 };
+  function toPipe(op) { return PIPE[op.a] ? op : window.HymnRules.translate(op, S || {}); }
   function send(op, optimistic) {
+    op = toPipe(op);
+    if (!op || op.error) { status = op ? { text: op.error, bad: true } : { text: '', bad: false }; paintStatus(); render(); return Promise.resolve(); }
     queue.push(op); save('hymn_queue_' + key, queue);
     if (optimistic) { try { optimistic(); } catch (e) {} }
     render();
@@ -102,8 +108,9 @@
   function flush() {
     if (busy || !queue.length) return Promise.resolve();
     busy = true; status = { text: 'Saving…', bad: false }; paintStatus();
-    var op = queue[0];
-    return post(op).then(function (d) {
+    var out = toPipe(queue[0]);   // older phones may have queued un-translated changes
+    if (!out || out.error) { queue.shift(); save('hymn_queue_' + key, queue); busy = false; if (queue.length) return flush(); return refresh(); }
+    return post(out).then(function (d) {
       queue.shift(); save('hymn_queue_' + key, queue);
       busy = false;
       var ok = took(d);

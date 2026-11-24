@@ -24,3 +24,13 @@ After changing `Code.gs`: Deploy > Manage deployments > edit > Version: New vers
 ## Tests
 
 `node tests/suite.js` runs the real `Code.gs` against an in-memory Sheet and drives the page in Chromium (iPhone + desktop): permissions, presence, offline ticks, no sideways scroll.
+
+
+## How changes ship (since 24 Nov 2026)
+
+`backend/Code.gs` is a plain pipe: it checks link keys, keeps jobs apart and
+reads/writes rows (`add`, `set`, `del`, `batch`). All features and rules live in
+`rules.js` + `app.js`, so new features only need a push to GitHub, never a new
+Apps Script deployment. A new list (tab) or column is created in the Sheet the
+first time the page writes to it. The page is served at https://crew.elliot.onl/<job>?k=KEY
+(`404.html` serves the app for any job path).

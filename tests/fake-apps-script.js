@@ -5,6 +5,7 @@ var fs = require('fs'), vm = require('vm'), path = require('path'), crypto = req
 function makeBackend(seed) {
   var tabs = {};
   function Sheet(name) { this.name = name; this.data = []; }
+  Sheet.prototype.getName = function () { return this.name; };
   Sheet.prototype.getLastRow = function () { return this.data.length; };
   Sheet.prototype.getLastColumn = function () { return Math.max.apply(null, [0].concat(this.data.map(function (r) { return r.length; }))); };
   Sheet.prototype.appendRow = function (r) { this.data.push(r.map(text)); };
@@ -20,7 +21,8 @@ function makeBackend(seed) {
   function text(v) { return typeof v === 'string' && v.charAt(0) === "'" ? v.slice(1) : v; }
   var ss = {
     getSheetByName: function (n) { return tabs[n] || null; },
-    insertSheet: function (n) { return (tabs[n] = new Sheet(n)); }
+    insertSheet: function (n) { return (tabs[n] = new Sheet(n)); },
+    getSheets: function () { return Object.keys(tabs).map(function (k) { return tabs[k]; }); }
   };
   var cache = {};
   var ctx = {
@@ -36,8 +38,19 @@ function makeBackend(seed) {
   };
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', 'Code.gs'), 'utf8'), ctx);
-  ctx.setup();
-  (seed || []).forEach(function (s) { tabs[s[0]].appendRow(ctx.TABS[s[0]].map(function (h) { return s[1][h] === undefined ? '' : s[1][h]; })); });
+  // The live Sheet's tabs as they are today.
+  var HEAD = {
+    jobs:  ['job', 'title', 'dates', 'call', 'location', 'prep', 'deck', 'admin_key', 'notes', 'dp_notes'],
+    crew:  ['job', 'key', 'name', 'role', 'dept', 'email', 'phone', 'kit_done', 'added'],
+    items: ['id', 'job', 'dept', 'item', 'qty', 'supplier', 'asked_by', 'owner', 'confirmed', 'packed', 'notes', 'source', 'updated'],
+    tasks: ['id', 'job', 'who', 'task', 'due', 'done', 'updated'],
+    shots: ['job', 'no', 'shot', 'notes'],
+    flags: ['id', 'job', 'text', 'status', 'source', 'raised_by', 'time'],
+    log:   ['time', 'job', 'who', 'what'],
+    seen:  ['job', 'key', 'name', 'first', 'last', 'opens']
+  };
+  Object.keys(HEAD).forEach(function (n) { ss.insertSheet(n).appendRow(HEAD[n]); });
+  (seed || []).forEach(function (s) { tabs[s[0]].appendRow(HEAD[s[0]].map(function (h) { return s[1][h] === undefined ? '' : s[1][h]; })); });
   return {
     tabs: tabs, ctx: ctx,
     get: function (params) { return JSON.parse(ctx.doGet({ parameter: params }).body); },

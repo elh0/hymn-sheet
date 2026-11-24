@@ -18,7 +18,8 @@ module.exports = function serve(backend, port) {
     }
     if (u.pathname === '/config.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); return res.end("window.HYMN_API = '/api'; window.HYMN_DP_EMAIL = 'dp@x.com';"); }
     var f = path.join(root, u.pathname === '/' ? 'index.html' : u.pathname);
-    if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
+    if (!f.startsWith(root)) { res.writeHead(404); return res.end(); }
+    if (!fs.existsSync(f)) { f = path.join(root, '404.html'); res.writeHead(404, { 'Content-Type': 'text/html' }); return fs.createReadStream(f).pipe(res); }
     res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'text/plain' });
     fs.createReadStream(f).pipe(res);
   });

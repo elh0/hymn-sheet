@@ -2,6 +2,17 @@
 var assert = require('assert');
 var makeBackend = require('./fake-apps-script');
 var serve = require('./serve');
+var rules = require('../rules.js');
+// What the page does: read state, let rules.js turn the action into a Sheet op, post it.
+function act(b, k, op) {
+  var S = b.get({ a: 'state', k: k });
+  var o = rules.translate(op, S);
+  if (!o) return S;
+  if (o.error) return o;
+  o.k = k;
+  return b.post(JSON.stringify(o));
+}
+function raw(b, k, op) { op.k = k; return b.post(JSON.stringify(op)); }
 var pw; try { pw = require('playwright'); } catch (e) { pw = require('/usr/local/lib/node_modules/playwright'); }
 
 function seed() {
@@ -42,38 +53,55 @@ async function backendTests() {
   });
   await check('Elliot gets crew link keys', function () { assert.strictEqual(b.get({ a: 'state', k: 'ADMIN1' }).crew[0].key, 'JAMES1'); });
   await check('crew can add kit, it lands unconfirmed', function () {
-    var s = b.post(JSON.stringify({ a: 'add_item', k: 'MILO1', item: 'Focus package', dept: 'Focus', supplier: 'Own kit' }));
+    var s = act(b, 'MILO1', { a: 'add_item', item: 'Focus package', dept: 'Focus', supplier: 'Own kit' });
     var it = s.items.filter(function (i) { return i.item === 'Focus package'; })[0];
     assert(it && !it.confirmed && it.asked_by === 'Milo Brown' && it.owner === 'Milo Brown');
   });
-  await check('crew can confirm', function () { var r = b.post(JSON.stringify({ a: 'tick_item', k: 'MILO1', id: 'i2', field: 'confirmed' })); assert(!r.error, r.error); b.post(JSON.stringify({ a: 'tick_item', k: 'MILO1', id: 'i2', field: 'confirmed' })); });
+  await check('crew can confirm', function () { var r = act(b, 'MILO1', { a: 'tick_item', id: 'i2', field: 'confirmed' }); assert(!r.error, r.error); act(b, 'MILO1', { a: 'tick_item', id: 'i2', field: 'confirmed' }); });
   await check('crew can tick packed, with name and time', function () {
-    var s = b.post(JSON.stringify({ a: 'tick_item', k: 'JAMES1', id: 'i1', field: 'packed' }));
+    var s = act(b, 'JAMES1', { a: 'tick_item', id: 'i1', field: 'packed' });
     assert(/^James Burns · /.test(s.items[0].packed));
   });
   await check('crew changing the supplier un-confirms the item', function () {
-    var s = b.post(JSON.stringify({ a: 'set_item', k: 'JAMES1', id: 'i1', fields: { supplier: 'Production' } }));
+    var s = act(b, 'JAMES1', { a: 'set_item', id: 'i1', fields: { supplier: 'Production' } });
     assert.strictEqual(s.items[0].confirmed, ''); assert.strictEqual(s.items[0].supplier, 'Production');
   });
   await check('crew cannot rename an item', function () {
-    var s = b.post(JSON.stringify({ a: 'set_item', k: 'JAMES1', id: 'i1', fields: { item: 'Hacked' } }));
+    var s = act(b, 'JAMES1', { a: 'set_item', id: 'i1', fields: { item: 'Hacked' } });
     assert(s.items[0].item !== 'Hacked');
   });
-  await check('crew can tick someone else\'s task', function () { var r = b.post(JSON.stringify({ a: 'tick_task', k: 'JAMES1', id: 't2' })); assert(!r.error, r.error); b.post(JSON.stringify({ a: 'tick_task', k: 'JAMES1', id: 't2' })); });
-  await check('crew can give someone a task', function () { var r = b.post(JSON.stringify({ a: 'add_task', k: 'JAMES1', who: 'Milo', task: 'Check batteries' })); assert(!r.error, r.error); });
-  await check('crew tick their own task', function () { assert(b.post(JSON.stringify({ a: 'tick_task', k: 'JAMES1', id: 't1' })).tasks[0].done); });
+  await check('pipe: crew cannot edit the job', function () { assert(raw(b, 'JAMES1', { a: 'set', tab: 'jobs', fields: { title: 'X' } }).error); });
+  await check('pipe: crew cannot add crew', function () { assert(raw(b, 'JAMES1', { a: 'add', tab: 'crew', row: { name: 'X' } }).error); });
+  await check('pipe: crew cannot change someone else\'s details', function () { assert(raw(b, 'JAMES1', { a: 'set', tab: 'crew', id: 'MILO1', fields: { phone: '1' } }).error); });
+  await check('pipe: nobody can write the log or keys', function () {
+    assert(raw(b, 'ADMIN1', { a: 'add', tab: 'log', row: { what: 'x' } }).error);
+    var s = raw(b, 'JAMES1', { a: 'set', tab: 'crew', id: '@me', fields: { key: 'HACK', job: 'other' } });
+    assert(!b.get({ a: 'state', k: 'HACK' }).items || b.get({ a: 'state', k: 'HACK' }).error); assert(!b.get({ a: 'state', k: 'JAMES1' }).error);
+  });
+  await check('pipe: a new feature can use a new list with no script change', function () {
+    var s = raw(b, 'JAMES1', { a: 'add', tab: 'parking', row: { who: '@me', reg: 'AB12 CDE' }, log: 'parking added' });
+    assert(s.parking && s.parking[0].reg === 'AB12 CDE' && s.parking[0].who === 'James Burns' && s.parking[0].id);
+    assert(!b.get({ a: 'state', k: 'OTHER1' }).parking || !b.get({ a: 'state', k: 'OTHER1' }).parking.length);
+  });
+  await check('pipe: new columns are added when needed', function () {
+    var s = raw(b, 'ADMIN1', { a: 'set', tab: 'items', id: 'i2', fields: { colour: 'black' } });
+    assert.strictEqual(s.items.filter(function (i) { return i.id === 'i2'; })[0].colour, 'black');
+  });
+  await check('crew can tick someone else\'s task', function () { var r = act(b, 'JAMES1', { a: 'tick_task', id: 't2' }); assert(!r.error, r.error); act(b, 'JAMES1', { a: 'tick_task', id: 't2' }); });
+  await check('crew can give someone a task', function () { var r = act(b, 'JAMES1', { a: 'add_task', who: 'Milo', task: 'Check batteries' }); assert(!r.error, r.error); });
+  await check('crew tick their own task', function () { assert(act(b, 'JAMES1', { a: 'tick_task', id: 't1' }).tasks[0].done); });
   await check('every change goes in the log', function () {
     var s = b.get({ a: 'state', k: 'ADMIN1' });
     assert(s.log.length >= 4); assert(s.log.some(function (l) { return /packed Sony Venice/.test(l.what) && l.who === 'James Burns'; }));
   });
-  await check('cross-job ids are refused', function () { assert(b.post(JSON.stringify({ a: 'tick_item', k: 'JAMES1', id: 'i3', field: 'packed' })).error); });
+  await check('cross-job ids are refused', function () { assert(act(b, 'JAMES1', { a: 'tick_item', id: 'i3', field: 'packed' }).error); });
   await check('Elliot adds crew and gets a new link', function () {
-    var s = b.post(JSON.stringify({ a: 'add_crew', k: 'ADMIN1', name: 'Henry', role: 'Grip', email: 'h@x.com' }));
+    var s = act(b, 'ADMIN1', { a: 'add_crew', name: 'Henry', role: 'Grip', email: 'h@x.com' });
     var h = s.crew.filter(function (c) { return c.name === 'Henry'; })[0]; assert(h && h.key.length === 12);
     assert(!b.get({ a: 'state', k: h.key }).error);
   });
   await check('phone numbers keep their +', function () {
-    b.post(JSON.stringify({ a: 'add_crew', k: 'ADMIN1', name: 'Phone Test', phone: '+44 7796 000000' }));
+    act(b, 'ADMIN1', { a: 'add_crew', name: 'Phone Test', phone: '+44 7796 000000' });
     var d = b.get({ a: 'state', k: 'ADMIN1' }).crew.filter(function (c) { return c.name === 'Phone Test'; })[0];
     assert.strictEqual(d.phone, '+44 7796 000000');
   });
@@ -83,7 +111,7 @@ async function backendTests() {
     assert(m.online && m.opens === '1');
   });
   await check('kit done toggles', function () {
-    var s = b.post(JSON.stringify({ a: 'kit_done', k: 'MILO1' }));
+    var s = act(b, 'MILO1', { a: 'kit_done' });
     assert(s.crew.filter(function (c) { return c.name === 'Milo Brown'; })[0].kit_done);
   });
 }
@@ -217,6 +245,13 @@ async function uiTests() {
   await check('phone: sees Elliot\'s confirm within a poll', async function () {
     await page.evaluate(function () { document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForFunction(function () { return /confirmed 2/.test(document.querySelector('.count').textContent); }, null, { timeout: 12000 });
+  });
+  await check('a job path like /test loads the app (crew.elliot.onl/yzy)', async function () {
+    var jp = await desk.newPage(); jp.on('pageerror', function (e) { errors.push(e.message); });
+    await jp.goto(base + 'test?k=ADMIN1');
+    await jp.waitForSelector('h1');
+    assert(/Test Job/.test(await jp.textContent('h1')));
+    await jp.close();
   });
   await check('no script errors', function () { assert.deepStrictEqual(errors, []); });
   await browser.close(); server.close();
