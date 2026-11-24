@@ -95,7 +95,8 @@
   // rules.js turns the change into a plain Sheet op (before the screen updates,
   // so it sees what was there); the backend only checks keys.
   var PIPE = { add: 1, set: 1, del: 1, batch: 1 };
-  function toPipe(op) { return PIPE[op.a] ? op : window.HymnRules.translate(op, S || {}); }
+  // Until the new script is deployed (state has no v), send the old-style action.
+  function toPipe(op) { if (S && !S.v) return op; return PIPE[op.a] ? op : window.HymnRules.translate(op, S || {}); }
   function send(op, optimistic) {
     op = toPipe(op);
     if (!op || op.error) { status = op ? { text: op.error, bad: true } : { text: '', bad: false }; paintStatus(); render(); return Promise.resolve(); }
