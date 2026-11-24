@@ -452,8 +452,21 @@
     return h;
   }
 
+  // Elliot: everyone's link in one place, one tap to copy or WhatsApp.
+  function linksBlock() {
+    if (!S.me.admin) return '';
+    var h = '<section class="links"><h2>Links</h2><ul>';
+    S.crew.forEach(function (c) {
+      if (!c.key) return;
+      var link = linkFor(c.person || c.key);
+      var wa = 'https://wa.me/' + (c.phone || '').replace(/[^\d]/g, '').replace(/^0/, '44') + '?text=' + encodeURIComponent('hey ' + first(c.name).toLowerCase() + ', everything for ' + S.job.title + ' is on here, kit, tasks & crew. add your kit & tick stuff off as it\'s sorted:\n\n' + link);
+      h += '<li><span>' + esc(c.name) + '</span><span class="row"><button class="link" data-act="copy" data-text="' + esc(link) + '">Copy</button><a class="link" target="_blank" rel="noopener" href="' + esc(wa) + '">WhatsApp</a></span></li>';
+    });
+    return h + '</ul></section>';
+  }
+
   function crewView() {
-    var h = '<section><h2>Crew <span class="grey">(' + S.crew.length + ')</span></h2><ul class="crew">';
+    var h = linksBlock() + '<section><h2>Crew <span class="grey">(' + S.crew.length + ')</span></h2><ul class="crew">';
     h += '<li class="person"><span class="dot' + (S.elliotOnline ? ' on' : '') + '"></span><div class="body"><div class="name">Elliot Holbrow</div><div class="meta">DP</div></div></li>';
     S.crew.forEach(function (c, n) {
       var t = tasksOf(c.name), done = t.filter(function (x) { return x.done; }).length;

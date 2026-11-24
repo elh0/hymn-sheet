@@ -181,3 +181,7 @@ textarea:focus { outline: none; }
 .jobs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 .jobs button { padding: 2px 9px; border-radius: 4px; font-size: 14px; color: var(--grey); border: 1px solid var(--faint); }
 .jobs button.on { color: var(--ink); border-color: var(--ink); }
+
+/* Elliot's links list */
+.links li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--faint); font-size: 15px; }
+.links .row { margin: 0; flex-wrap: nowrap; }
