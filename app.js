@@ -120,7 +120,7 @@
     var noSup = S.items.filter(function (i) { return !i.supplier || same(i.supplier, 'TBC'); });
     if (noSup.length) out.push({ text: noSup.length + ' item' + (noSup.length > 1 ? 's' : '') + ' with no supplier: ' + noSup.slice(0, 4).map(function (i) { return i.item; }).join(', ') + (noSup.length > 4 ? '…' : ''), auto: 'nosupplier' });
     var unc = S.items.filter(function (i) { return !i.confirmed; });
-    if (unc.length) out.push({ text: unc.length + ' item' + (unc.length > 1 ? 's' : '') + ' not confirmed by Elliot yet', auto: 'unconfirmed' });
+    if (unc.length) out.push({ text: unc.length + ' item' + (unc.length > 1 ? 's' : '') + ' not confirmed yet', auto: 'unconfirmed' });
     var counts = {};
     S.items.forEach(function (i) { var k = i.item.trim().toLowerCase(); counts[k] = (counts[k] || []).concat(i); });
     Object.keys(counts).forEach(function (k) {
@@ -218,7 +218,7 @@
     f.forEach(function (x) {
       h += '<li><span>' + esc(x.text) + (x.by ? ' <i>' + esc(x.by) + (x.time ? ', ' + esc(x.time) : '') + '</i>' : '') + '</span>';
       if (x.manual && S.me.admin) h += '<button class="link" data-act="flag" data-id="' + esc(x.id) + '">Sorted</button>';
-      if (x.auto === 'unconfirmed' && S.me.admin) h += '<button class="link" data-act="filter" data-f="unconfirmed">Show</button>';
+      if (x.auto === 'unconfirmed') h += '<button class="link" data-act="filter" data-f="unconfirmed">Show</button>';
       if (x.auto === 'nosupplier') h += '<button class="link" data-act="filter" data-f="nosupplier">Show</button>';
       h += '</li>';
     });
@@ -268,7 +268,7 @@
     h += '<div class="meta">' + meta.join('<span class="sep"> · </span>') + '</div>';
     if (i.notes && !open) h += '<div class="meta note">' + esc(i.notes) + '</div>';
     h += '</div>';
-    if (S.me.admin) h += '<button class="tick' + (i.confirmed ? ' on' : '') + '" data-act="confirm" data-id="' + esc(i.id) + '">' + (i.confirmed ? 'OK' : 'Confirm') + '</button>';
+    h += '<button class="tick' + (i.confirmed ? ' on' : '') + '" data-act="confirm" data-id="' + esc(i.id) + '">' + (i.confirmed ? 'OK' : 'Confirm') + '</button>';
     h += '</li>';
     if (open) h += itemEditor(i);
     return h;
@@ -334,9 +334,8 @@
       h += addItemBlock();
       h += '<p class="gap"><button class="wide' + (meRow.kit_done ? ' on' : '') + '" data-act="kitdone">' + (meRow.kit_done ? 'My kit is all on the sheet · ' + esc(meRow.kit_done) : 'I\'ve added all my kit') + '</button></p>';
       h += '<p><a class="btn wide-btn update" target="_blank" rel="noopener" href="' + esc(myUpdate()) + '">Send my update</a></p></section>';
-    } else {
-      h += taskAdder();
     }
+    h += taskAdder();
 
     h += '<section><h2>Something wrong?</h2><form class="box" data-form="flag">';
     h += '<label>Problem<input name="text" id="flag_text" data-keep="flag_text" placeholder="e.g. no batteries for the Ember"></label>';

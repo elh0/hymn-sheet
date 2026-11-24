@@ -256,7 +256,6 @@ function act(a, p, me) {
     var ti = findBy('items', p.id, j);
     if (!ti) return { error: 'That item has gone. Pull to refresh.' };
     var field = p.field === 'confirmed' ? 'confirmed' : 'packed';
-    if (field === 'confirmed' && !me.admin) return { error: 'Only Elliot confirms items.' };
     var on = !ti[field];
     var o = {}; o[field] = on ? stamp : ''; o.updated = fmt();
     setCells('items', ti._row, o);
@@ -273,7 +272,7 @@ function act(a, p, me) {
 
   if (a === 'add_task') {
     if (!clean(p.task)) return { error: 'Say what the task is.' };
-    var who = me.admin ? clean(p.who, 60) || me.name : me.name;
+    var who = clean(p.who, 60) || me.name;
     append('tasks', { id: newId(), job: j, who: who, task: clean(p.task, 200), due: clean(p.due, 40), done: '', updated: fmt() });
     return 'task for ' + who + ': ' + clean(p.task, 200);
   }
@@ -281,10 +280,9 @@ function act(a, p, me) {
   if (a === 'tick_task') {
     var t = findBy('tasks', p.id, j);
     if (!t) return { error: 'That task has gone. Pull to refresh.' };
-    if (!me.admin && !same(t.who, me.name) && !same(t.who, 'everyone')) return { error: 'That one is ' + t.who + '\'s.' };
     var done = !t.done;
     setCells('tasks', t._row, { done: done ? stamp : '', updated: fmt() });
-    return (done ? 'done: ' : 'reopened: ') + t.task;
+    return (done ? 'done: ' : 'reopened: ') + t.task + (same(t.who, me.name) ? '' : ' (' + t.who + '\'s)');
   }
 
   if (a === 'delete_task') {

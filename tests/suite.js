@@ -46,7 +46,7 @@ async function backendTests() {
     var it = s.items.filter(function (i) { return i.item === 'Focus package'; })[0];
     assert(it && !it.confirmed && it.asked_by === 'Milo Brown' && it.owner === 'Milo Brown');
   });
-  await check('crew cannot confirm', function () { assert(b.post(JSON.stringify({ a: 'tick_item', k: 'MILO1', id: 'i2', field: 'confirmed' })).error); });
+  await check('crew can confirm', function () { var r = b.post(JSON.stringify({ a: 'tick_item', k: 'MILO1', id: 'i2', field: 'confirmed' })); assert(!r.error, r.error); b.post(JSON.stringify({ a: 'tick_item', k: 'MILO1', id: 'i2', field: 'confirmed' })); });
   await check('crew can tick packed, with name and time', function () {
     var s = b.post(JSON.stringify({ a: 'tick_item', k: 'JAMES1', id: 'i1', field: 'packed' }));
     assert(/^James Burns · /.test(s.items[0].packed));
@@ -59,7 +59,8 @@ async function backendTests() {
     var s = b.post(JSON.stringify({ a: 'set_item', k: 'JAMES1', id: 'i1', fields: { item: 'Hacked' } }));
     assert(s.items[0].item !== 'Hacked');
   });
-  await check('crew cannot tick someone else\'s task', function () { assert(b.post(JSON.stringify({ a: 'tick_task', k: 'JAMES1', id: 't2' })).error); });
+  await check('crew can tick someone else\'s task', function () { var r = b.post(JSON.stringify({ a: 'tick_task', k: 'JAMES1', id: 't2' })); assert(!r.error, r.error); b.post(JSON.stringify({ a: 'tick_task', k: 'JAMES1', id: 't2' })); });
+  await check('crew can give someone a task', function () { var r = b.post(JSON.stringify({ a: 'add_task', k: 'JAMES1', who: 'Milo', task: 'Check batteries' })); assert(!r.error, r.error); });
   await check('crew tick their own task', function () { assert(b.post(JSON.stringify({ a: 'tick_task', k: 'JAMES1', id: 't1' })).tasks[0].done); });
   await check('every change goes in the log', function () {
     var s = b.get({ a: 'state', k: 'ADMIN1' });
