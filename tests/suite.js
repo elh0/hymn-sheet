@@ -24,6 +24,7 @@ function seed() {
     ['crew', { job: 'test', key: 'LOUIS1', name: 'Louis Jones', role: 'Production manager', dept: 'Other', email: 'l@x.com' }],
     ['crew', { job: 'test', key: 'MCX1', name: 'Aduke', role: 'MCX', dept: 'Other', email: 'a@x.com' }],
     ['crew', { job: 'test', key: 'DAVO1', name: 'Davo', role: 'DIT', dept: 'DIT', email: 'd@x.com' }],
+    ['crew', { job: 'test', key: 'MAX1', name: 'Maxine Carlier', role: 'Production designer', dept: 'Art', email: 'x@x.com' }],
     ['crew', { job: 'other', key: 'OTHER1', name: 'Someone', role: 'Gaffer' }],
     ['items', { id: 'i1', job: 'test', dept: 'Camera', item: 'Sony Venice 8.6K w/ Rialto', qty: '1', supplier: 'MCX', asked_by: 'Elliot', owner: 'James Burns', confirmed: 'Elliot · 24 Nov 10:00' }],
     ['items', { id: 'i2', job: 'test', dept: 'Camera', item: 'NDs', supplier: 'TBC', asked_by: 'Elliot' }],
@@ -304,7 +305,7 @@ async function uiTests() {
     act(b, 'ADMIN1', { a: 'set_job', fields: { needs: 'DIT, Spark' } });
     await ep.reload(); await ep.click('[data-tab=kit]'); await ep.waitForSelector('.flags');
     var t = await ep.textContent('.flags'); if (/Show all/.test(t)) { await ep.click('[data-act=allflags]'); t = await ep.textContent('.flags'); }
-    assert(/No Spark booked yet\. Louis to book one\?/.test(t) && !/No DIT/.test(t), t);
+    assert(/No Spark booked yet\. Louis to book one\?/.test(t) && !/No DIT/.test(t) && !/Maxine to book/.test(t), t); // production designer is art, not a booker
     await ep.click('[data-act=booknow][data-role=Spark]');
     await ep.fill('#book_name', 'Sam Spark');
     await ep.click('form[data-form=booking] button[type=submit]');

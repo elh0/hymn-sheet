@@ -454,10 +454,12 @@
     return list.map(function (s) { return '<option' + (s === cur ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '<option value="__other">Other…</option>';
   }
   // Roles that can be picked before anyone's booked: "Grip (not named yet)". They raise a flag until a name goes in.
+  // Who books crew & kit: producer, production manager / PM, coordinator. Not "production designer" (that's art).
+  var BOOKER = /producer|production manager|coordinator|\bpm\b/i;
   var OPEN_ROLES = ['Grip', 'Gaffer', 'Spark', '1st AC', '2nd AC', 'DIT', 'Steadicam op', 'Playback', 'Production', 'Art dept'];
   var UNNAMED = ' (not named yet)';
   var ROLE_MATCH = { 'Grip': /grip/i, 'Gaffer': /gaffer/i, 'Spark': /spark|electric/i, '1st AC': /1st ac|focus/i, '2nd AC': /2nd ac|clapper|loader/i,
-    'DIT': /\bdit\b|data/i, 'Steadicam op': /steadicam|operator|handheld/i, 'Playback': /playback|vtr|video/i, 'Production': /production|producer|coordinator|\bpm\b/i, 'Art dept': /\bart\b|designer|props/i };
+    'DIT': /\bdit\b|data/i, 'Steadicam op': /steadicam|operator|handheld/i, 'Playback': /playback|vtr|video/i, 'Production': BOOKER, 'Art dept': /\bart\b|designer|props/i };
   function isUnnamed(n) { return String(n || '').indexOf(UNNAMED) > 0; }
   // Someone on the crew already does this role (Mark, Gaffer).
   function roleRe(role) { return ROLE_MATCH[role] || new RegExp(String(role).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); }
@@ -467,8 +469,8 @@
       (S.bookings || []).filter(function (b) { return re.test(b.role || ''); }).map(function (b) { return { name: b.name, role: b.role, pending: true }; })[0] || null;
   }
   function needs() { return String((S.job && S.job.needs) || '').split(/\s*,\s*/).filter(Boolean); }
-  function canBook() { return S.me.admin || /production|producer|coordinator|\bpm\b/i.test(S.me.role || ''); }
-  function bookers() { var b = S.crew.filter(function (c) { return /production|producer|coordinator|\bpm\b/i.test(c.role || ''); }).map(function (c) { return first(c.name); }); return b.length ? b.join(' or ') : 'Production'; }
+  function canBook() { return S.me.admin || BOOKER.test(S.me.role || ''); }
+  function bookers() { var b = S.crew.filter(function (c) { return BOOKER.test(c.role || ''); }).map(function (c) { return first(c.name); }); return b.length ? b.join(' or ') : 'Production'; }
   function crewOptions(cur) {
     var names = S.crew.map(function (c) { return c.name; }).concat(['Elliot']);
     var roles = OPEN_ROLES.filter(function (r) { return !bookedAs(r); }).map(function (r) { return r + UNNAMED; });
@@ -696,7 +698,7 @@
   /* Suggested emails for anyone on the sheet. They open in the person's own mail, ready to edit & send. */
   /* Invite wording (Elliot's voice: short, "&", no sign-up talk beyond one line). */
   function roleKind(c) {
-    if (/production|producer|coordinator|\bpm\b|runner/i.test(c.role || '')) return 'prod';
+    if (BOOKER.test(c.role || '') || /runner/i.test(c.role || '')) return 'prod';
     if (/director/i.test(c.role || '') || c.dept === 'Director') return 'dir';
     if (S.crew.some(function (x) { return x === c; }) && supplierLike(c)) return 'supplier';
     return 'crew';
@@ -738,7 +740,7 @@
   }
   function waHref(c, link) { return 'https://wa.me/' + (c.phone || '').replace(/[^\d]/g, '').replace(/^0/, '44') + '?text=' + encodeURIComponent(inviteWhatsApp(c, link)); }
 
-  function production() { return S.crew.filter(function (c) { return /production manager|producer|coordinator|\bpm\b/i.test(c.role || '') && c.email; }); }
+  function production() { return S.crew.filter(function (c) { return BOOKER.test(c.role || '') && c.email; }); }
   function dpEmail() { return window.HYMN_DP_EMAIL || ''; }
   function supplierContact(sup) { return S.crew.filter(function (c) { return c.email && sup && same(c.role, sup); })[0]; }
 
