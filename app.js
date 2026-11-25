@@ -236,6 +236,7 @@
   }
 
   function offline() {
+    if (!S) { fatal('Can\'t reach the Hymn Sheet right now. Check your signal, then reload the page.'); return; }
     status = { text: queue.length ? 'No signal. ' + queue.length + ' change' + (queue.length > 1 ? 's' : '') + ' will send when you\'re back.' : 'No signal. Showing the last copy.', bad: true };
     paintStatus();
   }
@@ -284,6 +285,14 @@
 
   /* ---------- render ---------- */
   function render() {
+    try { draw(); }
+    catch (e) {
+      // A saved copy from an older version can trip the page up: drop it and fetch fresh.
+      store('hymn_state_' + key + '_' + job, null); store('hymn_state_' + key, null);
+      fatal('Something went wrong showing this page (' + (e && e.message) + '). Reload to try again.');
+    }
+  }
+  function draw() {
     if (!S) return;
     var active = document.activeElement;
     var keepId = active && active.id, keepVal = active && active.value, keepPos = active && active.selectionStart;
@@ -952,6 +961,10 @@
   if (!API) { fatal('Not switched on yet. Elliot needs to paste the script link into config.js.'); return; }
   if (!key) { fatal('Open the link Elliot sent you. Each person has their own.'); return; }
   if (NICE && location.protocol === 'http:') { location.replace('https://' + location.host + location.pathname + location.search); return; }
+  setTimeout(function () {
+    var b = root.querySelector('.boot');
+    if (b) b.textContent = 'Hymn Sheet. Still loading, the first load can take 10 seconds or so…';
+  }, 6000);
   upgradeLink().then(function (moved) {
     if (moved) return;
     if (S) render();
