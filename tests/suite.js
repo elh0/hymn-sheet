@@ -394,7 +394,7 @@ async function uiTests() {
     var t = await page.textContent('main');
     assert(/Camera & codecs/.test(t) && /Venice 8.6K full res/.test(t) && /Rickshaw in low/.test(t), t.slice(0, 200));
     var doc = await page.evaluate(function () { var a = [].filter.call(document.querySelectorAll('main a'), function (x) { return /drive\.google/.test(x.href); })[0]; return a && [a.textContent, a.href]; });
-    assert(doc && doc[0] === 'Call sheet v7 ↗' && /file\/d\/abc/.test(doc[1]), JSON.stringify(doc));
+    assert(doc && doc[0].replace(/\u00a0/g, ' ') === 'Call sheet v7 ↗' && /file\/d\/abc/.test(doc[1]), JSON.stringify(doc));
     await page.click('[data-tab=kit]');
   });
   await check('desktop: Message Davo drafts his codecs section, not the light', async function () {

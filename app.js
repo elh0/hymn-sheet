@@ -562,7 +562,7 @@
   function docsBlock() {
     var d = docLines();
     if (!d.length) return '';
-    return '<section class="docs"><h2>Documents <span class="grey">(start here)</span></h2><ul class="bul">' + d.map(function (l) { return '<li>' + linkify(l) + '</li>'; }).join('') + '</ul></section>';
+    return '<section class="docs"><h2>Documents <span class="grey">(start here)</span></h2><ul class="doclist">' + d.map(function (l) { return '<li>' + linkify(l) + '</li>'; }).join('') + '</ul></section>';
   }
 
   // Open flags that are about you: they name you, you raised them, or they're about your kit. Elliot sees them all.
@@ -743,7 +743,13 @@
   // "Call sheet v7: https://..." shows as a link called "Call sheet v7" (the Documents list at the top of the notes).
   function linkify(t) {
     var m = String(t).match(/^(.+?):\s+(https?:\/\/\S+)\s*$/);
-    if (m && !/https?:/.test(m[1])) return '<a target="_blank" rel="noopener" href="' + esc(m[2]) + '">' + esc(m[1]) + ' ↗</a>';
+    if (m && !/https?:/.test(m[1])) {
+      // "Camera list V1 (Mike Linforth, 26 Nov)": the name is the link, who & when sit after it in grey.
+      var lab = m[1], who = '', w = lab.match(/^(.*?)\s*(\([^()]*\)[^()]*)$/);
+      if (w && w[1]) { lab = w[1]; who = w[2]; }
+      var words = esc(lab).split(' '), last = words.pop();
+      return '<a class="doc-link" target="_blank" rel="noopener" href="' + esc(m[2]) + '">' + (words.length ? words.join(' ') + ' ' : '') + '<span class="nw">' + last + '\u00a0↗</span></a>' + (who ? ' <span class="grey">' + esc(who) + '</span>' : '');
+    }
     return esc(t).replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a target="_blank" rel="noopener" href="' + u + '">' + u + '</a>'; }); }
 
   // Which notes sections matter to which department.
