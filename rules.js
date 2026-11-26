@@ -159,6 +159,19 @@
       return { a: 'del', tab: 'asks', id: qd.id, log: 'removed question: ' + qd.text };
     }
 
+    // Job chat: everyone on the job can post; whoever posted (or Elliot) can remove it. Not logged, it's chat.
+    if (a === 'say') {
+      var said = clean(op.text, 1000);
+      if (!said) return { error: 'Type a message.' };
+      return { a: 'add', tab: 'chat', row: { who: '@me', text: said, time: '@now' } };
+    }
+    if (a === 'unsay') {
+      var cm = find(S.chat || [], op.id);
+      if (!cm) return null;
+      if (!admin && !same(cm.who, me.name)) return { error: 'Only whoever wrote it can remove it.' };
+      return { a: 'del', tab: 'chat', id: cm.id };
+    }
+
     if (a === 'add_crew') {
       if (!admin) return { error: 'Only Elliot adds crew.' };
       if (!clean(op.name)) return { error: 'Name needed.' };

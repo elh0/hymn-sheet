@@ -272,9 +272,32 @@ async function uiTests() {
     assert(/Plan/.test(await page.textContent('nav button.on')));
     assert(await page.$('.contents .chip'));
   });
+  await check('phone: job chat: send a message, others see it, @name turns into their task', async function () {
+    await page.click('[data-tab=chat]');
+    await page.fill('#say_text', '@Milo can you bring the spare LCS?');
+    await page.click('.say button[type=submit]');
+    await page.waitForFunction(function () { return !document.getElementById('status').classList.contains('show'); });
+    var st = b.get({ a: 'state', k: 'MILO1' });
+    assert(st.chat && st.chat.some(function (m) { return /spare LCS/.test(m.text) && m.who === 'James Burns'; }), JSON.stringify(st.chat));
+    assert(!st.log.some(function (l) { return /spare LCS/.test(l.what); }), 'chat went on the log');
+    await page.click('[data-act=chattask]');
+    assert(/Me/.test(await page.textContent('nav button.on')));
+    assert.strictEqual(await page.inputValue('#task_text'), 'can you bring the spare LCS?');
+    assert.strictEqual(await page.$eval('[data-keep=task_who]', function (e) { return e.value; }), 'Milo Brown');
+    await page.fill('#task_text', '');
+    raw(b, 'MILO1', { a: 'add', tab: 'chat', row: { who: '@me', text: 'yep on it', time: '@now' } });
+    await page.reload(); await page.waitForSelector('nav');
+    assert(/Chat\s*\(1\)/.test(await page.textContent('[data-tab=chat]')), await page.textContent('[data-tab=chat]'));
+    await page.click('[data-tab=chat]');
+    assert(/yep on it/.test(await page.textContent('.msgs')));
+    assert(!/\(/.test(await page.textContent('[data-tab=chat]')));
+    var mid = b.get({ a: 'state', k: 'MILO1' }).chat.filter(function (m) { return m.who === 'Milo Brown'; })[0].id;
+    assert(!(await page.$('[data-act=unsay][data-id="' + mid + '"]')), 'James can remove Milo\'s message');
+    await page.click('[data-tab=mine]');
+  });
   await check('phone: tabs are named for what they hold', async function () {
     var names = await page.$$eval('nav button', function (l) { return l.map(function (b) { return b.textContent.replace(/\s*\(.*$/, '').trim(); }); });
-    assert.deepStrictEqual(names, ['Me', 'Kit', 'Plan', 'Crew', 'Changes']);
+    assert.deepStrictEqual(names, ['Me', 'Kit', 'Plan', 'Chat', 'Crew', 'Changes']);
   });
   await check('phone: flags show no-supplier and unconfirmed', async function () {
     await page.click('[data-tab=kit]');

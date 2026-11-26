@@ -302,10 +302,11 @@
     var h = '<div class="wrap">' + header() + tabs() + '<main>';
     if (S.loading) h += '<p class="grey gap">Loading…</p>';
     else h += hint();
-    if (!S.loading && ui.tab !== 'log') h += asksBlock() + sinceBlock();
+    if (!S.loading && ui.tab !== 'log' && ui.tab !== 'chat') h += asksBlock() + sinceBlock();
     if (S.loading) {}
     else if (ui.tab === 'kit') h += kitView();
     else if (ui.tab === 'mine') h += mineView();
+    else if (ui.tab === 'chat') h += chatView();
     else if (ui.tab === 'crew') h += crewView();
     else if (ui.tab === 'notes' || ui.tab === 'shots') h += notesView() + shotsView();
     else h += logView();
@@ -317,6 +318,13 @@
       var el = document.getElementById(keepId);
       if (el) { el.focus(); if (keepVal !== undefined && el.value !== keepVal && el.tagName !== 'SELECT') el.value = keepVal; try { el.setSelectionRange(keepPos, keepPos); } catch (e) {} }
     }
+    // Chat: read once you're looking at it; jump to the newest when you open it or something new arrives.
+    if (ui.tab === 'chat' && !S.loading) {
+      var cn = ((S && S.chat) || []).length;
+      if (ui.chatScroll || ui.chatLen !== cn || ui.lastTab !== 'chat') window.scrollTo(0, document.body.scrollHeight);
+      ui.chatLen = cn; ui.chatScroll = false; markChatSeen();
+    }
+    ui.lastTab = ui.tab;
     paintStatus();
   }
 
@@ -363,10 +371,11 @@
 
   function tabs() {
     var flags = openFlags().length;
-    var t = [['mine', 'Me'], ['kit', 'Kit'], ['notes', 'Plan'], ['crew', 'Crew'], ['log', 'Changes']];
+    var t = [['mine', 'Me'], ['kit', 'Kit'], ['notes', 'Plan'], ['chat', 'Chat'], ['crew', 'Crew'], ['log', 'Changes']];
     return '<nav>' + t.map(function (x) {
       var extra = '';
       if (x[0] === 'mine') { var open = myTasks().filter(function (k) { return !k.done; }).length + myFlags().length + toSend().length; if (open) extra = ' (' + open + ')'; }
+      if (x[0] === 'chat' && ui.tab !== 'chat') { var un = chatUnread(); if (un) extra = ' <span class="blue">(' + un + ')</span>'; }
       if (x[0] === 'kit' && flags) extra = ' <span class="red">(' + flags + ')</span>';
       return '<button class="' + (ui.tab === x[0] || (x[0] === 'notes' && ui.tab === 'shots') ? 'on' : '') + '" data-tab="' + x[0] + '">' + x[1] + extra + '</button>';
     }).join('') + '</nav>';
@@ -549,6 +558,7 @@
     kit: 'Every bit of kit for the shoot, by department. Tap an item to see who brings it & tick it when it\'s packed.',
     notes: 'The plan from Elliot: documents, schedule, camera, light & look. Tap a heading below to jump to it.',
     shots: 'The plan from Elliot: documents, schedule, camera, light & look. Tap a heading below to jump to it.',
+    chat: 'One chat for everyone on the job. Type @ & a name to point it at someone. Tap Make it a task to put it on their list.',
     crew: 'Who\'s on the job & how to reach them.',
     log: 'Everything that\'s changed on this sheet, newest first.'
   };
@@ -627,6 +637,40 @@
     return h + '</li>';
   }
 
+  /* ---------- job chat ---------- */
+  function chat() { return ((S && S.chat) || []).slice(-150); }
+  function chatSeenKey() { return 'hymn_chat_' + key + '_' + (S && S.job ? S.job.job : job); }
+  function chatUnread() {
+    var seen = +(store(chatSeenKey()) || 0), all = (S && S.chat) || [];
+    return all.filter(function (m, n) { return n >= seen && !same(m.who, S.me.name); }).length;
+  }
+  function markChatSeen() { store(chatSeenKey(), String(((S && S.chat) || []).length)); }
+  function mentionOf(t) {
+    var hit = '';
+    S.crew.concat([{ name: 'Elliot' }]).some(function (c) { var f = first(c.name); if (f.length > 1 && new RegExp('@' + f + '\\b', 'i').test(t)) { hit = c.name === 'Elliot' ? 'Elliot' : c.name; return true; } });
+    return hit;
+  }
+  function chatText(t) {
+    return esc(t).replace(/(^|\s)(@[A-Za-z][\w-]*)/g, '$1<b class="at">$2</b>').replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a target="_blank" rel="noopener" href="' + u + '">' + u + '</a>'; });
+  }
+  function chatView() {
+    var list = chat(), h = '<section class="chat"><ul class="msgs">';
+    if (!list.length) h += '<li class="grey">No messages yet. Say hi to the crew.</li>';
+    var last = '';
+    list.forEach(function (m) {
+      var mine = same(m.who, S.me.name);
+      h += '<li class="msg' + (mine ? ' me' : '') + '" id="m-' + esc(m.id) + '">';
+      if (m.who !== last) h += '<div class="who">' + esc(mine ? 'You' : m.who) + ' <span class="grey small">' + esc(m.time || '') + '</span></div>';
+      h += '<div class="said">' + chatText(m.text) + '</div><div class="acts">';
+      h += '<button class="link grey small" data-act="chattask" data-id="' + esc(m.id) + '">Make it a task</button>';
+      if (mine || S.me.admin) h += '<button class="link grey small" data-act="unsay" data-id="' + esc(m.id) + '">Remove</button>';
+      h += '</div></li>';
+      last = m.who;
+    });
+    h += '</ul><form class="say" data-form="say"><input name="text" id="say_text" data-keep="say_text" autocomplete="off" placeholder="Message everyone on the job"><button type="submit">Send</button></form></section>';
+    return h;
+  }
+
   // How it works: a short card the first time someone opens their page, & any time from "How it works".
   function tourSteps() {
     var L = [['Open the DP notes', 'The big link at the top is the deck with the look & diagrams. Everything else is under All documents.', 'docs']];
@@ -635,6 +679,7 @@
     L.push(['Ask someone', 'Ask a question & it shows on their page in yellow until they answer.', 'askform']);
     L.push(['Give someone a task', 'Pick a name, write the task, add a day. It lands on their page.', 'giveTask']);
     L.push(['Flag a problem', 'Something missing or wrong? Flag it & it goes to the right person.', 'flagform']);
+    L.push(['Chat with the crew', 'The Chat tab is one chat for everyone on the job. Type @ & a name to point it at someone.', '@chat']);
     L.push(['See what changed', 'The Changes tab lists every update, newest first, with who did it.', '@log']);
     return L;
   }
@@ -1027,6 +1072,19 @@
     if (a === 'booknow') { var br = t.getAttribute('data-role'); ui.booking = br && ui.booking !== br ? br : null; render(); var bn = document.getElementById('book_name'); if (bn) bn.focus(); return; }
     if (a === 'givebooking') { send({ a: 'give_booking', id: id }); return; }
     if (a === 'gotit') { ui.dismissed = true; lastLook = Date.now(); markSeen(); render(); return; }
+    if (a === 'unsay') { send({ a: 'unsay', id: id }, function () { S.chat = chat().filter(function (m) { return m.id !== id; }); }); return; }
+    if (a === 'chattask') {
+      var cmsg = chat().filter(function (m) { return m.id === id; })[0];
+      if (!cmsg) return;
+      var who = mentionOf(cmsg.text) || (same(cmsg.who, S.me.name) ? '' : cmsg.who);
+      ui.tab = 'mine'; store('hymn_tab2', 'mine'); render();
+      var tt = document.getElementById('task_text'), tw = root.querySelector('[data-keep="task_who"]');
+      if (tt) tt.value = cmsg.text.replace(/(^|\s)@[A-Za-z][\w-]*/g, '$1').trim();
+      if (tw && who) Array.prototype.forEach.call(tw.options, function (o) { if (same(o.value || o.text, who)) tw.value = o.value || o.text; });
+      var gt = document.getElementById('giveTask'); if (gt) gt.scrollIntoView();
+      if (tt) tt.focus();
+      return;
+    }
     if (a === 'tourdone') { store('hymn_tour1', '1'); ui.tour = false; render(); window.scrollTo(0, 0); return; }
     if (a === 'tour') { ui.tour = true; ui.tab = 'mine'; store('hymn_tab2', 'mine'); render(); var te = document.getElementById('tour'); if (te) te.scrollIntoView(); return; }
     if (a === 'jump') { var je = document.getElementById(t.getAttribute('data-to')); if (je) je.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
@@ -1101,6 +1159,11 @@
       if (!v.task) return;
       clear();
       send({ a: 'add_task', who: v.who, task: v.task, due: v.due }, function () { S.tasks.push({ id: 'tmp' + Date.now(), who: v.who, task: v.task, due: v.due, done: '' }); });
+    } else if (kind === 'say') {
+      if (!v.text) return;
+      clear();
+      send({ a: 'say', text: v.text }, function () { S.chat = chat().concat([{ id: 'tmp' + Date.now(), who: S.me.name, text: v.text, time: 'now' }]); markChatSeen(); });
+      ui.chatScroll = true;
     } else if (kind === 'ask') {
       if (!v.text) return;
       var about = ui.askAbout || '';
