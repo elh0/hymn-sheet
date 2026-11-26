@@ -230,7 +230,7 @@ async function uiTests() {
   });
   await check('phone: first open shows How it works; Got it hides it & the footer brings it back', async function () {
     await page.evaluate(function () { localStorage.removeItem('hymn_tour1'); }); await page.reload(); await page.waitForSelector('.todo');
-    assert(/Add your kit/.test(await page.textContent('#tour')) && /Give someone a task/.test(await page.textContent('#tour')));
+    assert(/Your kit/.test(await page.textContent('#tour')) && /Ask or give a task/.test(await page.textContent('#tour')));
     await page.click('[data-act=tourdone]');
     assert(!(await page.$('#tour')));
     await page.reload(); await page.waitForSelector('.todo');
@@ -305,7 +305,7 @@ async function uiTests() {
     assert(/James Burns/.test(c.listed), JSON.stringify(c));
     assert(!/Camera kit list/.test(await page.textContent('.todo')));
     await page.click('[data-tab=kit]');
-    assert(/Waiting on Elliot to OK the list/.test(await page.textContent('.chains')), await page.textContent('.chains'));
+    assert(/Waiting on Elliot/.test(await page.textContent('.chains')), await page.textContent('.chains'));
     assert(/Remind/.test(await page.textContent('.chains')));
     await page.click('.chain-row .top');
     assert(/DP OK/.test(await page.textContent('.chain-steps')));

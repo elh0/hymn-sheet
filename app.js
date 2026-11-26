@@ -652,27 +652,24 @@
   function stepOwner(c, k) { return k === 'listed' ? c.lister : k === 'ok' ? 'Elliot' : k === 'confirmed' ? booker() : c.preps; }
   function canStep(c, k) { return S.me.admin || (k === 'confirmed' ? BOOKER.test(S.me.role || '') : same(stepOwner(c, k), S.me.name)); }
   function nextStep(c) { for (var n = 0; n < STEPS.length; n++) if (!c[STEPS[n][0]]) return n; return -1; }
-  function shortStamp(v) { var p = String(v || '').split(' · '); return p.length > 1 ? first(p[0]) + ' ' + p[1] : v; }
+  function shortStamp(v) { var p = String(v || '').split(' · '); return p.length > 1 ? p[1] : v; }
   function chainRow(c) {
     var n = nextStep(c), open = ui.openChain === c.id, h = '<div class="chain-row' + (open ? ' open' : '') + '">';
     var st = n >= 0 ? STEPS[n] : null, who = st ? stepOwner(c, st[0]) : '';
-    h += '<div class="top" data-act="chainopen" data-id="' + esc(c.id) + '"><b>' + esc(c.list) + '</b>';
+    h += '<div class="top" data-act="chainopen" data-id="' + esc(c.id) + '"><b>' + esc(c.list) + '</b><span class="grey small">' + (st ? 'step ' + (n + 1) + ' of 5' : 'done') + ' ' + (open ? '▴' : '▾') + '</span></div>';
+    h += '<div class="bar" data-act="chainopen" data-id="' + esc(c.id) + '">' + STEPS.map(function (x, i) { return '<span class="seg ' + (c[x[0]] ? 'd' : i === n ? 'n' : '') + '"><i></i><em>' + esc(x[1]) + '</em></span>'; }).join('') + '</div>';
+    h += '<div class="nextrow">';
+    if (st) h += '<span class="next">Waiting on <span class="who">' + esc(same(who, S.me.name) ? 'you' : first(who) || '?') + '</span>' + (c.due && n === 0 ? ' · by ' + esc(c.due) : '') + '</span>';
+    else h += '<span class="next done">All done</span>';
     if (st && canStep(c, st[0])) h += '<button class="pillbtn go" data-act="chainstep" data-id="' + esc(c.id) + '" data-step="' + st[0] + '">' + esc(st[2]) + '</button>';
-    else if (st && who) h += '<button class="pillbtn" data-act="chainremind" data-id="' + esc(c.id) + '">Remind</button>';
-    h += '</div><div class="bar" data-act="chainopen" data-id="' + esc(c.id) + '">' + STEPS.map(function (x, i) { return '<i class="' + (c[x[0]] ? 'd' : i === n ? 'n' : '') + '"></i>'; }).join('') + '</div>';
-    if (st) h += '<div class="next">Waiting on <span class="who">' + esc(same(who, S.me.name) ? 'you' : first(who) || '?') + '</span> ' + esc(st[3]) + (c.due && n === 0 ? ', by ' + esc(c.due) : '') + '</div>';
-    else h += '<div class="next done">All done</div>';
-    if (!open) {
-      var VERB = { listed: 'Listed by', ok: 'OK\'d by', confirmed: 'Confirmed by', prepped: 'Prepped by', onset: 'On set with' };
-      var DO = { listed: 'lists', ok: 'OKs', confirmed: 'confirms', prepped: 'preps', onset: 'brings it to set' };
-      var done = STEPS.filter(function (x) { return c[x[0]]; }).map(function (x) { return VERB[x[0]] + ' ' + first(String(c[x[0]]).split(' · ')[0]) + ' ✓'; });
-      var todo = STEPS.filter(function (x, i) { return i > n && !c[x[0]]; }).map(function (x) { return first(stepOwner(c, x[0])) + ' ' + DO[x[0]]; });
-      h += '<div class="steps">' + esc(done.concat(todo.length ? ['then ' + todo.slice(0, 2).join(', ')] : []).join(' · ')) + '</div>';
-    } else {
+    else if (st && who) h += '<button class="link grey small" data-act="chainremind" data-id="' + esc(c.id) + '">Remind ' + esc(first(who)) + '</button>';
+    h += '</div>';
+    if (open) {
       h += '<ol class="chain-steps">' + STEPS.map(function (x, i) {
         var done = c[x[0]], o = stepOwner(c, x[0]);
-        var r = '<li class="' + (done ? 'd' : i === n ? 'n' : '') + '"><span class="sname">' + esc(x[1]) + '</span><span class="sowner">' + esc(o || '?') + '</span><span class="swhen">' + esc(done ? shortStamp(done) : i === n ? 'waiting' : '') + '</span>';
+        var r = '<li class="' + (done ? 'd' : i === n ? 'n' : '') + '"><span class="sname">' + esc(x[1]) + '</span><span class="sowner">' + esc(first(o) || '?') + '</span><span class="swhen">' + esc(done ? shortStamp(done) : i === n ? 'waiting' : '') + '</span>';
         if (canStep(c, x[0]) && (done || i === n)) r += '<button class="link small" data-act="chainstep" data-id="' + esc(c.id) + '" data-step="' + x[0] + '">' + (done ? 'Undo' : 'Done') + '</button>';
+        else r += '<span></span>';
         return r + '</li>';
       }).join('') + '</ol>';
       var cnt = S.items.filter(function (i) { return same(i.dept, c.list); }).length;
@@ -683,7 +680,7 @@
   function chainBlock() {
     var cs = chains();
     if (!cs.length && !S.me.admin) return '';
-    var h = '<section class="chains"><h2>Kit lists</h2><p class="grey small">Each bar is the five steps: listed, DP OK, confirmed, prepped, on set. Orange is who\'s up next. Tap a list for the detail.</p>';
+    var h = '<section class="chains"><h2>Kit lists</h2><p class="grey small">Who each list is waiting on. Tap one for who did what.</p>';
     h += cs.map(chainRow).join('');
     if (S.me.admin) {
       if (!ui.addChain) h += '<p><button class="link" data-act="addchain">+ Add a kit list</button></p>';
@@ -743,26 +740,20 @@
 
   // How it works: a short card the first time someone opens their page, & any time from "How it works".
   function tourSteps() {
-    var L = [['Open the DP notes', 'The big link at the top is the deck with the look & diagrams. Everything else is under All documents.', 'docs']];
-    L.push(['Tick off your to-dos', 'Tap the box next to a to-do when it\'s done. Red ! lines are flags about your job.', 'todo']);
-    if (!S.me.admin) L.push(['Add your kit', 'Tap + Add kit under Your kit for anything you\'re bringing or need. Tick it when it\'s packed.', 'mykit']);
-    L.push(['Ask someone', 'Ask a question & it shows on their page in yellow until they answer.', 'askform']);
-    L.push(['Give someone a task', 'Pick a name, write the task, add a day. It lands on their page.', 'giveTask']);
-    L.push(['Flag a problem', 'Something missing or wrong? Flag it & it goes to the right person.', 'flagform']);
-    L.push(['Chat with the crew', 'The Chat tab is one chat for everyone on the job. Type @ & a name to point it at someone.', '@chat']);
-    L.push(['See what changed', 'The Changes tab lists every update, newest first, with who did it.', '@log']);
+    var L = [['DP notes', 'Start here: look & diagrams', 'docs'], ['To-dos', 'Tick them off when done', 'todo']];
+    L.push(S.me.admin ? ['Kit lists', 'Who each list waits on', '@kit'] : ['Your kit', 'Add what you\'re bringing', 'mykit']);
+    L.push(['Ask or give a task', 'It lands on their page', 'askform'], ['Chat', 'One chat for the whole job', '@chat'], ['Changes', 'Everything that moved', '@log']);
     return L;
   }
   function tourSeen() { return !!store('hymn_tour1'); }
   function tourBlock() {
     if (tourSeen() && !ui.tour) return '';
-    var h = '<section class="tour" id="tour"><h2>How it works</h2><ol>';
-    tourSteps().forEach(function (x) {
-      var go = x[2].charAt(0) === '@' ? '<button class="link" data-act="tab" data-t="' + x[2].slice(1) + '">Show me</button>' : '<button class="link" data-act="jump" data-to="' + x[2] + '">Show me</button>';
-      h += '<li><b>' + esc(x[0]) + '.</b> ' + esc(x[1]) + ' ' + go + '</li>';
+    var h = '<section class="tour" id="tour"><div class="tour-head"><h2>How it works</h2><button class="link" data-act="tourdone">Got it ×</button></div><div class="tiles">';
+    tourSteps().forEach(function (x, n) {
+      var act = x[2].charAt(0) === '@' ? 'data-act="tab" data-t="' + x[2].slice(1) + '"' : 'data-act="jump" data-to="' + x[2] + '"';
+      h += '<button class="tile" ' + act + '><span class="num">' + (n + 1) + '</span><b>' + esc(x[0]) + '</b><span class="grey">' + esc(x[1]) + '</span></button>';
     });
-    h += '</ol><p><button data-act="tourdone">Got it</button></p><p class="grey small">Open this again any time from How it works at the bottom.</p></section>';
-    return h;
+    return h + '</div></section>';
   }
 
   // The one document most people open first (the DP notes deck), shown big at the top.
@@ -775,14 +766,13 @@
   function secId(title) { return 'sec-' + String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 
   function mineView() {
-    var h = toSendBlock();
+    var h = tourBlock() + toSendBlock();
     var meRow = S.crew.filter(function (c) { return same(c.name, S.me.name); })[0] || {};
     var mt = myTasks(), todo = mt.filter(function (t) { return !t.done; }), done = mt.filter(function (t) { return t.done; }), mf = myFlags(), tf = thinkFlags(), mc = myChainSteps();
     var reads = S.me.admin ? [] : sectionsFor(meRow).map(function (x) { return x.title; });
     var mi = S.me.admin ? [] : myItems(), docs = docLines();
     if (!S.me.admin) h += '<p class="hello">Hi ' + esc(first(S.me.name)) + '. Open the DP notes, then work down your list.</p>';
 
-    h += tourBlock();
     // Start here: the DP notes deck, then a jump to each part of this page.
     var md = mainDoc();
     h += '<section class="start">';
@@ -792,6 +782,7 @@
     if (reads.length) h += jump('plan', 'Your plan', reads.length);
     if (!S.me.admin) h += jump('mykit', 'Your kit', mi.length);
     if (docs.length) h += jump('docs', 'All documents', docs.length);
+    if (tourSeen() && !ui.tour) h += '<button class="chip" data-act="tour">How it works</button>';
     h += '</div></section>';
 
     h += '<section class="todo" id="todo"><h2>Your to-dos <span class="grey">(' + (todo.length + mf.length + mc.length) + ')</span></h2>';
@@ -1171,7 +1162,7 @@
       return;
     }
     if (a === 'tourdone') { store('hymn_tour1', '1'); ui.tour = false; render(); window.scrollTo(0, 0); return; }
-    if (a === 'tour') { ui.tour = true; ui.tab = 'mine'; store('hymn_tab2', 'mine'); render(); var te = document.getElementById('tour'); if (te) te.scrollIntoView(); return; }
+    if (a === 'tour') { ui.tour = true; ui.tab = 'mine'; store('hymn_tab2', 'mine'); render(); window.scrollTo(0, 0); var te = document.getElementById('tour'); if (te) te.scrollIntoView(); return; }
     if (a === 'jump') { var je = document.getElementById(t.getAttribute('data-to')); if (je) je.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     if (a === 'gosec') { ui.tab = 'notes'; store('hymn_tab2', 'notes'); render(); var ge = document.getElementById(t.getAttribute('data-to')); if (ge) ge.scrollIntoView(); else window.scrollTo(0, 0); return; }
     if (a === 'tab') { ui.tab = t.getAttribute('data-t'); store('hymn_tab2', ui.tab); render(); return; }
