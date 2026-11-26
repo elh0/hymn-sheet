@@ -26,7 +26,7 @@
  * Only admins see or write 'people'. Old per-job keys keep working.
  */
 
-var VERSION = 'pipe-2';
+var VERSION = 'pipe-3';
 var TZ = 'Europe/London';
 var ONLINE_MS = 2 * 60 * 1000;
 var BASE = {
@@ -37,6 +37,8 @@ var BASE = {
   people: ['key', 'name', 'email', 'admin']
 };
 var NO_WRITE = ['log', 'seen'];
+// Lists starting dp_ are Elliot's own (e.g. dp_send, messages he still has to send): crew never see or write them.
+var ADMIN_ONLY = /^dp_/;
 var LOCKED_COLS = ['job', 'key', 'admin_key', 'id'];
 
 /* ---------- entry points ---------- */
@@ -224,6 +226,7 @@ function state(me, live) {
   };
   tabNames().forEach(function (name) {
     if (name === 'jobs' || name === 'crew' || name === 'seen' || name === 'people' || out[name] !== undefined) return;
+    if (ADMIN_ONLY.test(name) && !me.admin) return;
     if (headOf(sheet(name)).indexOf('job') < 0) return;
     var list = rows(name).filter(mine).map(strip);
     out[name] = name === 'log' ? list.slice(-80).reverse() : list;
@@ -270,6 +273,7 @@ function run(op, me) {
   var j = me.job.job, tab = clean(op.tab, 31), a = op.a;
   if (!/^[a-z][a-z0-9_]{0,30}$/.test(tab)) return { error: 'Unknown list.' };
   if (NO_WRITE.indexOf(tab) >= 0) return { error: 'That list is read-only.' };
+  if (ADMIN_ONLY.test(tab) && !me.admin) return { error: 'That list is Elliot\'s.' };
   var said = clean(op.log, 400);
 
   if (tab === 'people') {

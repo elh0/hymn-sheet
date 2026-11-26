@@ -84,6 +84,14 @@ async function backendTests() {
     assert(s.parking && s.parking[0].reg === 'AB12 CDE' && s.parking[0].who === 'James Burns' && s.parking[0].id);
     assert(!b.get({ a: 'state', k: 'OTHER1' }).parking || !b.get({ a: 'state', k: 'OTHER1' }).parking.length);
   });
+  await check('dp_ lists are Elliot\'s: crew can\'t write or see them', function () {
+    var r = raw(b, 'ADMIN1', { a: 'add', tab: 'dp_send', row: { to: 'Milo', via: 'WhatsApp', about: 'Rialto', text: 'hey milo\n\nall good' } });
+    assert(r.dp_send && r.dp_send.length === 1, JSON.stringify(r).slice(0, 200));
+    assert(raw(b, 'JAMES1', { a: 'add', tab: 'dp_send', row: { text: 'x' } }).error);
+    assert(raw(b, 'JAMES1', { a: 'set', tab: 'dp_send', id: r.dp_send[0].id, fields: { sent: 'x' } }).error);
+    var c = b.get({ a: 'state', k: 'JAMES1' });
+    assert(!c.dp_send && !JSON.stringify(c).includes('hey milo'));
+  });
   await check('pipe: new columns are added when needed', function () {
     var s = raw(b, 'ADMIN1', { a: 'set', tab: 'items', id: 'i2', fields: { colour: 'black' } });
     assert.strictEqual(s.items.filter(function (i) { return i.id === 'i2'; })[0].colour, 'black');
@@ -286,6 +294,16 @@ async function uiTests() {
     await ep.click('[data-tab=crew]');
     var t = await ep.textContent('.crew');
     assert(/James Burns2nd AC · online now/.test(t) && /kit in/.test(t), t);
+  });
+  await check('desktop: Elliot\'s Mine tab has To send, with copy, WhatsApp & Sent', async function () {
+    raw(b, 'ADMIN1', { a: 'add', tab: 'dp_send', row: { to: 'Milo', via: 'WhatsApp', about: 'Rialto', text: 'hey milo\n\nall good' } });
+    await ep.reload(); await ep.click('[data-tab=mine]'); await ep.waitForSelector('.tosend');
+    var t = await ep.textContent('.tosend');
+    assert(/To send \(1\)/.test(t) && /hey milo/.test(t), t);
+    var wa = await ep.getAttribute('.tosend a[href*="wa.me"]', 'href'); assert(/text=hey%20milo/.test(wa), wa);
+    await ep.click('.tosend [data-act=msgsent]'); await ep.waitForTimeout(300);
+    assert(!(await ep.$('.tosend')));
+    assert(b.get({ a: 'state', k: 'ADMIN1' }).dp_send[0].sent);
   });
   await check('desktop: "Grip (not named yet)" as who brings it raises a flag', async function () {
     act(b, 'ADMIN1', { a: 'add_item', item: 'Dolly + track', dept: 'Grip', owner: 'Grip (not named yet)' });

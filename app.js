@@ -365,7 +365,7 @@
     var t = [['kit', 'Kit'], ['mine', 'Mine'], ['notes', 'Notes'], ['crew', 'Crew'], ['log', 'Log']];
     return '<nav>' + t.map(function (x) {
       var extra = '';
-      if (x[0] === 'mine') { var open = myTasks().filter(function (k) { return !k.done; }).length; if (open) extra = ' (' + open + ')'; }
+      if (x[0] === 'mine') { var open = myTasks().filter(function (k) { return !k.done; }).length + toSend().length; if (open) extra = ' (' + open + ')'; }
       if (x[0] === 'kit' && flags) extra = ' <span class="red">(' + flags + ')</span>';
       return '<button class="' + (ui.tab === x[0] || (x[0] === 'notes' && ui.tab === 'shots') ? 'on' : '') + '" data-tab="' + x[0] + '">' + x[1] + extra + '</button>';
     }).join('') + '</nav>';
@@ -515,8 +515,35 @@
     return h;
   }
 
+  // Elliot only: replies he still has to send (dp_send list, never served to crew). Copy, open in WhatsApp or the Gmail draft, then tick Sent.
+  function toSend() { return S.me.admin ? (S.dp_send || []).filter(function (m) { return !m.sent && m.text; }) : []; }
+  function msgPhone(m) {
+    if (m.phone) return m.phone;
+    var c = S.crew.filter(function (x) { return same(x.name, m.to) || same(first(x.name), m.to); })[0];
+    return c && c.phone || '';
+  }
+  function toSendBlock() {
+    var list = toSend();
+    if (!list.length) return '';
+    var h = '<section class="tosend"><h2>To send <span class="grey">(' + list.length + ')</span></h2><p class="grey small">Only you see this. Copy, send it yourself, then tap Sent.</p><ul class="items">';
+    list.forEach(function (m) {
+      var email = /mail/i.test(m.via || '');
+      var num = msgPhone(m).replace(/[^\d]/g, '').replace(/^0/, '44');
+      h += '<li class="item msg"><div class="body">';
+      h += '<div class="name">' + esc(m.to) + (m.about ? ' <span class="grey">· ' + esc(m.about) + '</span>' : '') + '</div>';
+      h += '<div class="meta">' + (email ? 'Email' : 'WhatsApp') + (m.why ? ' · ' + esc(m.why) : '') + '</div>';
+      h += '<pre class="msgtext">' + esc(m.text) + '</pre>';
+      h += '<div class="row"><button class="link" data-act="copy" data-text="' + esc(m.text) + '">Copy</button>';
+      if (!email) h += '<a class="link" target="_blank" rel="noopener" href="https://wa.me/' + num + '?text=' + encodeURIComponent(m.text) + '">WhatsApp</a>';
+      if (m.gmail) h += '<a class="link" target="_blank" rel="noopener" href="' + esc(m.gmail) + '">Gmail draft</a>';
+      h += '<button class="link grey" data-act="msgsent" data-id="' + esc(m.id) + '">Sent</button></div>';
+      h += '</div></li>';
+    });
+    return h + '</ul></section>';
+  }
+
   function mineView() {
-    var h = '';
+    var h = toSendBlock();
     var mt = myTasks();
     h += '<section><h2>My tasks <span class="grey">(' + mt.filter(function (t) { return t.done; }).length + '/' + mt.length + ')</span></h2>';
     if (!mt.length) h += '<p class="grey">Nothing for you yet.</p>';
@@ -864,6 +891,7 @@
     if (a === 'delitem') { send({ a: 'delete_item', id: id }, function () { S.items = S.items.filter(function (i) { return i.id !== id; }); ui.open = null; }); return; }
     if (a === 'deltask') { send({ a: 'delete_task', id: id }, function () { S.tasks = S.tasks.filter(function (x) { return x.id !== id; }); }); return; }
     if (a === 'kitdone') { send({ a: 'kit_done' }, function () { var c = S.crew.filter(function (x) { return same(x.name, S.me.name); })[0]; if (c) c.kit_done = c.kit_done ? '' : 'now'; }); return; }
+    if (a === 'msgsent') { send({ a: 'set', tab: 'dp_send', id: id, fields: { sent: '@stamp' } }, function () { var m = (S.dp_send || []).filter(function (x) { return x.id === id; })[0]; if (m) m.sent = stamp(); }); return; }
     if (a === 'flag') { send({ a: 'resolve_flag', id: id }, function () { var f = S.flags.filter(function (x) { return x.id === id; })[0]; if (f) f.status = 'sorted'; }); return; }
   });
 
@@ -945,8 +973,8 @@
   });
 
   function copy(text) {
-    if (navigator.clipboard) navigator.clipboard.writeText(text).catch(function () { prompt('Copy this link', text); });
-    else prompt('Copy this link', text);
+    if (navigator.clipboard) navigator.clipboard.writeText(text).catch(function () { prompt('Copy this', text); });
+    else prompt('Copy this', text);
   }
 
   /* ---------- polling ---------- */
