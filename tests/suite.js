@@ -228,6 +228,17 @@ async function uiTests() {
     assert(/Check Rialto is on the quote/.test(t) && /backpack on the quote/.test(t) && !/Milo to confirm/.test(t), t);
     assert(!/Send focus quote/.test(t), 'Milo\'s task showed for James');
   });
+  await check('phone: first open shows How it works; Got it hides it & the footer brings it back', async function () {
+    await page.evaluate(function () { localStorage.removeItem('hymn_tour1'); }); await page.reload(); await page.waitForSelector('.todo');
+    assert(/Add your kit/.test(await page.textContent('#tour')) && /Give someone a task/.test(await page.textContent('#tour')));
+    await page.click('[data-act=tourdone]');
+    assert(!(await page.$('#tour')));
+    await page.reload(); await page.waitForSelector('.todo');
+    assert(!(await page.$('#tour')), 'came back after Got it');
+    await page.click('footer [data-act=tour]');
+    assert(await page.$('#tour'));
+    await page.click('[data-act=tourdone]');
+  });
   await check('phone: the top of my page has the DP notes & jumps to each part', async function () {
     assert(await page.$('.start .maindoc a.doc-link'), 'no main doc');
     var chips = await page.$$eval('.start .chip', function (l) { return l.map(function (b) { return b.textContent; }); });

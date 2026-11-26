@@ -309,7 +309,7 @@
     else if (ui.tab === 'crew') h += crewView();
     else if (ui.tab === 'notes' || ui.tab === 'shots') h += notesView() + shotsView();
     else h += logView();
-    h += '</main><footer>Elliot Holbrow · DP</footer></div>' + sureBar() + '<div id="status"></div>';
+    h += '</main><footer>Elliot Holbrow · DP · <button class="link grey" data-act="tour">How it works</button></footer></div>' + sureBar() + '<div id="status"></div>';
     root.innerHTML = h;
 
     Object.keys(forms).forEach(function (k) { var el = root.querySelector('[data-keep="' + k + '"]'); if (el) el.value = forms[k]; });
@@ -627,6 +627,29 @@
     return h + '</li>';
   }
 
+  // How it works: a short card the first time someone opens their page, & any time from "How it works".
+  function tourSteps() {
+    var L = [['Open the DP notes', 'The big link at the top is the deck with the look & diagrams. Everything else is under All documents.', 'docs']];
+    L.push(['Tick off your to-dos', 'Tap the box next to a to-do when it\'s done. Red ! lines are flags about your job.', 'todo']);
+    if (!S.me.admin) L.push(['Add your kit', 'Tap + Add kit under Your kit for anything you\'re bringing or need. Tick it when it\'s packed.', 'mykit']);
+    L.push(['Ask someone', 'Ask a question & it shows on their page in yellow until they answer.', 'askform']);
+    L.push(['Give someone a task', 'Pick a name, write the task, add a day. It lands on their page.', 'giveTask']);
+    L.push(['Flag a problem', 'Something missing or wrong? Flag it & it goes to the right person.', 'flagform']);
+    L.push(['See what changed', 'The Changes tab lists every update, newest first, with who did it.', '@log']);
+    return L;
+  }
+  function tourSeen() { return !!store('hymn_tour1'); }
+  function tourBlock() {
+    if (tourSeen() && !ui.tour) return '';
+    var h = '<section class="tour" id="tour"><h2>How it works</h2><ol>';
+    tourSteps().forEach(function (x) {
+      var go = x[2].charAt(0) === '@' ? '<button class="link" data-act="tab" data-t="' + x[2].slice(1) + '">Show me</button>' : '<button class="link" data-act="jump" data-to="' + x[2] + '">Show me</button>';
+      h += '<li><b>' + esc(x[0]) + '.</b> ' + esc(x[1]) + ' ' + go + '</li>';
+    });
+    h += '</ol><p><button data-act="tourdone">Got it</button></p><p class="grey small">Open this again any time from How it works at the bottom.</p></section>';
+    return h;
+  }
+
   // The one document most people open first (the DP notes deck), shown big at the top.
   function mainDoc() {
     var d = docLines(), m = null;
@@ -644,6 +667,7 @@
     var mi = S.me.admin ? [] : myItems(), docs = docLines();
     if (!S.me.admin) h += '<p class="hello">Hi ' + esc(first(S.me.name)) + '. Open the DP notes, then work down your list.</p>';
 
+    h += tourBlock();
     // Start here: the DP notes deck, then a jump to each part of this page.
     var md = mainDoc();
     h += '<section class="start">';
@@ -674,7 +698,7 @@
     h += askForm() + asksList();
     h += taskAdder();
 
-    h += '<section><h2>Something wrong?</h2><form class="box" data-form="flag">';
+    h += '<section id="flagform"><h2>Something wrong?</h2><form class="box" data-form="flag">';
     h += '<label>Problem<input name="text" id="flag_text" data-keep="flag_text" placeholder="e.g. no batteries for the Ember"></label>';
     h += '<div class="row"><button type="submit">Flag it</button></div></form></section>';
     return h;
@@ -689,7 +713,7 @@
   }
 
   function taskAdder() {
-    var h = '<section><h2>Give someone a task</h2><form class="box" data-form="task">';
+    var h = '<section id="giveTask"><h2>Give someone a task</h2><form class="box" data-form="task">';
     h += '<label>Who<select name="who" data-keep="task_who"><option>Everyone</option>' + crewOptions('') + '</select></label>';
     h += '<label>Task<input name="task" id="task_text" data-keep="task_text" placeholder="e.g. Check Rialto is on the MCX quote"></label>';
     h += '<label>By<input name="due" id="task_due" data-keep="task_due" placeholder="e.g. Wed 12:00"></label>';
@@ -1003,6 +1027,8 @@
     if (a === 'booknow') { var br = t.getAttribute('data-role'); ui.booking = br && ui.booking !== br ? br : null; render(); var bn = document.getElementById('book_name'); if (bn) bn.focus(); return; }
     if (a === 'givebooking') { send({ a: 'give_booking', id: id }); return; }
     if (a === 'gotit') { ui.dismissed = true; lastLook = Date.now(); markSeen(); render(); return; }
+    if (a === 'tourdone') { store('hymn_tour1', '1'); ui.tour = false; render(); window.scrollTo(0, 0); return; }
+    if (a === 'tour') { ui.tour = true; ui.tab = 'mine'; store('hymn_tab2', 'mine'); render(); var te = document.getElementById('tour'); if (te) te.scrollIntoView(); return; }
     if (a === 'jump') { var je = document.getElementById(t.getAttribute('data-to')); if (je) je.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     if (a === 'gosec') { ui.tab = 'notes'; store('hymn_tab2', 'notes'); render(); var ge = document.getElementById(t.getAttribute('data-to')); if (ge) ge.scrollIntoView(); else window.scrollTo(0, 0); return; }
     if (a === 'tab') { ui.tab = t.getAttribute('data-t'); store('hymn_tab2', ui.tab); render(); return; }

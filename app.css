@@ -236,3 +236,8 @@ a.doc-link .doc-arrow { flex: none; color: var(--grey); }
 .chip:hover { background: var(--hover); }
 .contents .chips { margin-top: 0; }
 [id] { scroll-margin-top: 12px; }
+.tour { background: var(--hover); border-radius: 4px; padding: 12px 16px; }
+.tour ol { margin: 4px 0 8px; padding-left: 20px; list-style: decimal; }
+.tour li { margin: 6px 0; line-height: 1.45; }
+.tour .link { margin-left: 4px; }
+footer .link { font-size: 13px; padding: 0; }
