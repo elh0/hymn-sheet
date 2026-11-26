@@ -220,10 +220,11 @@ textarea:focus { outline: none; }
 .docs h2 { font-size: 16px; margin-bottom: 4px; }
 .flagrow > .flagmark { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: none; font-weight: 600; }
 .flagrow .body { cursor: default; }
-/* Documents: one clean row each, arrow never wraps on its own */
-.nw { white-space: nowrap; }
+/* Documents: name left, arrow pinned right (never wraps), who & when small below */
 .doclist { list-style: none; padding: 0; margin: 0; }
-.doclist li { padding: 6px 0; border-top: 1px solid var(--faint); line-height: 1.35; }
+.doclist li { padding: 8px 0; border-top: 1px solid var(--faint); }
 .doclist li:first-child { border-top: 0; }
-.doclist .grey { font-size: 14px; }
-a.doc-link { font-weight: 500; }
+a.doc-link { display: flex; align-items: baseline; gap: 12px; text-decoration: none; color: inherit; font-weight: 500; }
+a.doc-link .doc-name { flex: 1; min-width: 0; text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
+a.doc-link .doc-arrow { flex: none; color: var(--grey); }
+.doc-who { display: block; font-size: 13px; color: var(--grey); margin-top: 2px; }

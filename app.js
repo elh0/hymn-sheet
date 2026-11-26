@@ -724,6 +724,10 @@
     if (!secs.length) h += '<p class="grey gap">No DP notes yet.</p>';
     secs.forEach(function (x) {
       h += '<section class="note-sec">' + (x.title ? '<h2>' + esc(x.title) + '</h2>' : '') + '<div class="doc">';
+      if (/^documents/i.test(x.title)) {
+        h += '<ul class="doclist">' + x.lines.map(function (l) { var b = l.match(/^\s*[-•]\s+(.*)/); return b ? '<li>' + linkify(b[1]) + '</li>' : (l.trim() ? '<li>' + linkify(l.trim()) + '</li>' : ''); }).join('') + '</ul></div></section>';
+        return;
+      }
       var list = false;
       x.lines.forEach(function (l) {
         var b = l.match(/^\s*[-•]\s+(.*)/);
@@ -747,8 +751,8 @@
       // "Camera list V1 (Mike Linforth, 26 Nov)": the name is the link, who & when sit after it in grey.
       var lab = m[1], who = '', w = lab.match(/^(.*?)\s*(\([^()]*\)[^()]*)$/);
       if (w && w[1]) { lab = w[1]; who = w[2]; }
-      var words = esc(lab).split(' '), last = words.pop();
-      return '<a class="doc-link" target="_blank" rel="noopener" href="' + esc(m[2]) + '">' + (words.length ? words.join(' ') + ' ' : '') + '<span class="nw">' + last + '\u00a0↗</span></a>' + (who ? ' <span class="grey">' + esc(who) + '</span>' : '');
+      // Name on the left, arrow pinned to the right edge (it can't wrap), who & when on a small line below.
+      return '<a class="doc-link" target="_blank" rel="noopener" href="' + esc(m[2]) + '"><span class="doc-name">' + esc(lab) + '</span><span class="doc-arrow">↗</span></a>' + (who ? '<span class="doc-who">' + esc(who.replace(/^\(([^()]*)\)[.,;:]?\s*/, function (a, b) { return b + ' · '; }).replace(/\s*·\s*$/, '')) + '</span>' : '');
     }
     return esc(t).replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a target="_blank" rel="noopener" href="' + u + '">' + u + '</a>'; }); }
 
