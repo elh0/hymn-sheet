@@ -211,6 +211,7 @@
   // Until the new script is deployed (state has no v), send the old-style action.
   function toPipe(op) { if (S && !S.v) return op; return PIPE[op.a] ? op : window.HymnRules.translate(op, S || {}); }
   function send(op, optimistic) {
+    if (ui.viewAs) { status = { text: 'You\'re seeing it as ' + first(ui.viewAs) + '. Tap Back to you to make changes.', bad: true }; paintStatus(); return Promise.resolve(); }
     op = toPipe(op);
     if (op && !op.error && job) op.job = job;
     if (!op || op.error) { status = op ? { text: op.error, bad: true } : { text: '', bad: false }; paintStatus(); render(); return Promise.resolve(); }
@@ -292,14 +293,26 @@
       fatal('Something went wrong showing this page (' + (e && e.message) + '). Reload to try again.');
     }
   }
+  // Elliot can look at the app as one of the crew sees it. Nothing saves while he's looking.
   function draw() {
+    if (!S) return;
+    if (ui.viewAs && S.me && S.me.admin) {
+      var real = S.me, c = S.crew.filter(function (x) { return x.name === ui.viewAs; })[0];
+      if (!c) { ui.viewAs = null; return draw(); }
+      S.me = { name: c.name, role: c.role, admin: false };
+      try { drawInner(); } finally { S.me = real; }
+      return;
+    }
+    drawInner();
+  }
+  function drawInner() {
     if (!S) return;
     var active = document.activeElement;
     var keepId = active && active.id, keepVal = active && active.value, keepPos = active && active.selectionStart;
     var forms = {};
     Array.prototype.forEach.call(root.querySelectorAll('[data-keep]'), function (el) { forms[el.getAttribute('data-keep')] = el.value; });
 
-    var h = '<div class="wrap">' + header() + tabs() + '<main>';
+    var h = '<div class="wrap">' + (ui.viewAs ? '<div class="viewas">Seeing it as <b>' + esc(ui.viewAs) + '</b> · nothing saves <button data-act="viewas" data-name="">Back to you</button></div>' : '') + header() + tabs() + '<main>';
     if (S.loading) h += '<p class="grey gap">Loading…</p>';
     else h += hint();
     if (!S.loading && ui.tab !== 'log' && ui.tab !== 'chat') h += asksBlock() + sinceBlock();
@@ -640,7 +653,7 @@
   /* ---------- kit lists: five steps each, one line per list ---------- */
   var STEPS = [
     ['listed', 'Listed', 'Mark it listed', 'for the list'],
-    ['ok', 'DP OK', 'OK it', 'to OK the list'],
+    ['ok', 'DP OK', 'Approve', 'to OK the list'],
     ['confirmed', 'Confirmed', 'Confirm it', 'to confirm it'],
     ['prepped', 'Prepped', 'Mark prepped', 'to prep it'],
     ['onset', 'On set', 'Mark on set', 'to bring it to set']];
@@ -653,35 +666,53 @@
   function canStep(c, k) { return S.me.admin || (k === 'confirmed' ? BOOKER.test(S.me.role || '') : same(stepOwner(c, k), S.me.name)); }
   function nextStep(c) { for (var n = 0; n < STEPS.length; n++) if (!c[STEPS[n][0]]) return n; return -1; }
   function shortStamp(v) { var p = String(v || '').split(' · '); return p.length > 1 ? p[1] : v; }
+  function ring(c) {
+    var C = 94.25, done = STEPS.filter(function (x) { return c[x[0]]; }).length, n = nextStep(c);
+    var dash = function (k) { return (C * k / 5).toFixed(1) + ' ' + C; };
+    var h = '<svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" class="track"/>';
+    if (n >= 0) h += '<circle cx="18" cy="18" r="15" class="nextarc" stroke-dasharray="' + dash(done + 1) + '" transform="rotate(-90 18 18)"/>';
+    if (done) h += '<circle cx="18" cy="18" r="15" class="donearc" stroke-dasharray="' + dash(done) + '" transform="rotate(-90 18 18)"/>';
+    if (n < 0) h += '<path d="M12 18.5l4 4 8-9" class="tick"/>';
+    return h + '</svg>';
+  }
+  function chainSub(c) {
+    var n = nextStep(c);
+    if (n < 0) return 'All done';
+    var st = STEPS[n], who = stepOwner(c, st[0]), me = same(who, S.me.name) || (st[0] === 'confirmed' && BOOKER.test(S.me.role || '') && !S.me.admin);
+    var need = { listed: 'to list', ok: 'to OK', confirmed: 'to confirm', prepped: 'to prep', onset: 'to bring to set' }[st[0]];
+    var mine = { listed: 'Needs your list', ok: 'Needs your OK', confirmed: 'Needs you to confirm', prepped: 'Needs you to prep', onset: 'Needs you to bring it' }[st[0]];
+    return (me ? '<span class="w">' + mine + '</span>' : '<span class="w">' + esc(first(who)) + '</span> ' + need) + (c.due && n === 0 ? ' · ' + esc(c.due) : '');
+  }
   function chainRow(c) {
-    var n = nextStep(c), open = ui.openChain === c.id, h = '<div class="chain-row' + (open ? ' open' : '') + '">';
-    var st = n >= 0 ? STEPS[n] : null, who = st ? stepOwner(c, st[0]) : '';
-    h += '<div class="top" data-act="chainopen" data-id="' + esc(c.id) + '"><b>' + esc(c.list) + '</b><span class="grey small">' + (st ? 'step ' + (n + 1) + ' of 5' : 'done') + ' ' + (open ? '▴' : '▾') + '</span></div>';
-    h += '<div class="bar" data-act="chainopen" data-id="' + esc(c.id) + '">' + STEPS.map(function (x, i) { return '<span class="seg ' + (c[x[0]] ? 'd' : i === n ? 'n' : '') + '"><i></i><em>' + esc(x[1]) + '</em></span>'; }).join('') + '</div>';
-    h += '<div class="nextrow">';
-    if (st) h += '<span class="next">Waiting on <span class="who">' + esc(same(who, S.me.name) ? 'you' : first(who) || '?') + '</span>' + (c.due && n === 0 ? ' · by ' + esc(c.due) : '') + '</span>';
-    else h += '<span class="next done">All done</span>';
-    if (st && canStep(c, st[0])) h += '<button class="pillbtn go" data-act="chainstep" data-id="' + esc(c.id) + '" data-step="' + st[0] + '">' + esc(st[2]) + '</button>';
-    else if (st && who) h += '<button class="link grey small" data-act="chainremind" data-id="' + esc(c.id) + '">Remind ' + esc(first(who)) + '</button>';
-    h += '</div>';
+    var n = nextStep(c), open = ui.openChain === c.id, st = n >= 0 ? STEPS[n] : null, who = st ? stepOwner(c, st[0]) : '';
+    var h = '<div class="cell' + (open ? ' open' : '') + '"><div class="crow">' + ring(c);
+    h += '<div class="cmain" data-act="chainopen" data-id="' + esc(c.id) + '"><div class="ctitle">' + esc(c.list) + '</div><div class="csub">' + chainSub(c) + '</div></div>';
+    var mineNow = st && canStep(c, st[0]) && (!S.me.admin || same(who, 'Elliot'));
+    if (mineNow) h += '<button class="cact strong" data-act="chainstep" data-id="' + esc(c.id) + '" data-step="' + st[0] + '">' + esc(st[2]) + '</button>';
+    else if (st && who) h += '<button class="cact" data-act="chainremind" data-id="' + esc(c.id) + '">Remind</button>';
+    h += '<span class="chev" data-act="chainopen" data-id="' + esc(c.id) + '">' + (open ? '⌃' : '›') + '</span></div>';
     if (open) {
       h += '<ol class="chain-steps">' + STEPS.map(function (x, i) {
         var done = c[x[0]], o = stepOwner(c, x[0]);
-        var r = '<li class="' + (done ? 'd' : i === n ? 'n' : '') + '"><span class="sname">' + esc(x[1]) + '</span><span class="sowner">' + esc(first(o) || '?') + '</span><span class="swhen">' + esc(done ? shortStamp(done) : i === n ? 'waiting' : '') + '</span>';
+        var r = '<li class="' + (done ? 'd' : i === n ? 'n' : '') + '"><span class="sdot"></span><span class="sname">' + esc(x[1]) + '</span><span class="sowner">' + esc(first(o) || '?') + '</span><span class="swhen">' + esc(done ? shortStamp(done) : i === n ? 'waiting' : '') + '</span>';
         if (canStep(c, x[0]) && (done || i === n)) r += '<button class="link small" data-act="chainstep" data-id="' + esc(c.id) + '" data-step="' + x[0] + '">' + (done ? 'Undo' : 'Done') + '</button>';
         else r += '<span></span>';
         return r + '</li>';
       }).join('') + '</ol>';
       var cnt = S.items.filter(function (i) { return same(i.dept, c.list); }).length;
-      if (cnt) h += '<p><button class="link" data-act="jump" data-to="dept-' + esc(String(c.list).toLowerCase()) + '">See the ' + cnt + ' item' + (cnt > 1 ? 's' : '') + ' ↓</button></p>';
+      if (cnt) h += '<p class="seeitems"><button class="link" data-act="jump" data-to="dept-' + esc(String(c.list).toLowerCase()) + '">See the ' + cnt + ' item' + (cnt > 1 ? 's' : '') + ' ↓</button></p>';
     }
     return h + '</div>';
   }
   function chainBlock() {
     var cs = chains();
     if (!cs.length && !S.me.admin) return '';
-    var h = '<section class="chains"><h2>Kit lists</h2><p class="grey small">Who each list is waiting on. Tap one for who did what.</p>';
-    h += cs.map(chainRow).join('');
+    var mine = cs.filter(function (c) { var n = nextStep(c); return n >= 0 && canStep(c, STEPS[n][0]) && (!S.me.admin || same(stepOwner(c, STEPS[n][0]), 'Elliot')); });
+    var others = cs.filter(function (c) { return mine.indexOf(c) < 0; });
+    var h = '<section class="chains"><h2>Kit lists</h2>';
+    if (mine.length) h += '<div class="ghdr">Waiting on you</div><div class="group">' + mine.map(chainRow).join('') + '</div>';
+    if (others.length) h += '<div class="ghdr">' + (mine.length ? 'Waiting on others' : 'Where each list is') + '</div><div class="group">' + others.map(chainRow).join('') + '</div>';
+    h += '<p class="gfoot">Tap a list to see each step and who\'s done it.</p>';
     if (S.me.admin) {
       if (!ui.addChain) h += '<p><button class="link" data-act="addchain">+ Add a kit list</button></p>';
       else {
@@ -748,12 +779,19 @@
   function tourSeen() { return !!store('hymn_tour1'); }
   function tourBlock() {
     if (tourSeen() && !ui.tour) return '';
-    var h = '<section class="tour" id="tour"><div class="tour-head"><h2>How it works</h2><button class="link" data-act="tourdone">Got it ×</button></div><div class="tiles">';
-    tourSteps().forEach(function (x, n) {
-      var act = x[2].charAt(0) === '@' ? 'data-act="tab" data-t="' + x[2].slice(1) + '"' : 'data-act="jump" data-to="' + x[2] + '"';
-      h += '<button class="tile" ' + act + '><span class="num">' + (n + 1) + '</span><b>' + esc(x[0]) + '</b><span class="grey">' + esc(x[1]) + '</span></button>';
-    });
-    return h + '</div></section>';
+    var first3 = S.me.admin ? [['the <b>DP notes</b> at the top', 'docs'], ['your <b>to-dos</b> as you go', 'todo'], ['the <b>kit lists</b> on Kit', '@kit']]
+      : [['the <b>DP notes</b> at the top', 'docs'], ['your <b>to-dos</b> as you go', 'todo'], ['the <b>kit</b> you\'re bringing', 'mykit']];
+    var verbs = ['Open', 'Tick off', S.me.admin ? 'Check' : 'Add'];
+    function go(t) { return t.charAt(0) === '@' ? 'data-act="tab" data-t="' + t.slice(1) + '"' : 'data-act="jump" data-to="' + t + '"'; }
+    var h = '<section class="callout" id="tour"><div class="ico">👋</div><div class="cbody"><div class="ct">' + (S.me.admin ? 'How it works' : 'New here? Three things to do') + '</div><ol>';
+    first3.forEach(function (x, n) { h += '<li><button class="plain" ' + go(x[1]) + '>' + verbs[n] + ' ' + x[0] + '</button></li>'; });
+    h += '</ol><details class="more"><summary><b>More:</b> chat, asking someone, giving a task, Changes</summary><ul>';
+    h += '<li><button class="plain" data-act="tab" data-t="chat"><b>Chat</b>: one chat for the whole job. Type @ & a name.</button></li>';
+    h += '<li><button class="plain" data-act="jump" data-to="askform"><b>Ask someone</b>: it shows on their page until they answer.</button></li>';
+    h += '<li><button class="plain" data-act="jump" data-to="giveTask"><b>Give a task</b>: it lands on their page.</button></li>';
+    h += '<li><button class="plain" data-act="tab" data-t="log"><b>Changes</b>: everything that moved, with who did it.</button></li>';
+    h += '</ul></details><button class="gotit" data-act="tourdone">Got it</button></div></section>';
+    return h;
   }
 
   // The one document most people open first (the DP notes deck), shown big at the top.
@@ -862,6 +900,7 @@
         if (S.me.admin && c.key) {
           var link = linkFor(c.person || c.key);
           if (c.email) h += '<div class="row"><a class="btn msg" target="_blank" rel="noopener" href="' + esc(messageFor(c)) + '">Message ' + esc(first(c.name)) + '</a></div>';
+          h += '<div class="row"><button class="link" data-act="viewas" data-name="' + esc(c.name) + '">See it as ' + esc(first(c.name)) + '</button></div>';
           h += '<div class="row"><button class="link" data-act="copy" data-text="' + esc(link) + '">Copy link</button>';
           if (!c.person && S.v !== 'pipe-1') h += '<button class="link" data-act="givelink" data-key="' + esc(c.key) + '">Make one link for all jobs</button>';
           h += '<a class="link" target="_blank" rel="noopener" href="' + esc(waHref(c, link)) + '">WhatsApp link</a>';
@@ -1133,6 +1172,7 @@
     if (a === 'booknow') { var br = t.getAttribute('data-role'); ui.booking = br && ui.booking !== br ? br : null; render(); var bn = document.getElementById('book_name'); if (bn) bn.focus(); return; }
     if (a === 'givebooking') { send({ a: 'give_booking', id: id }); return; }
     if (a === 'gotit') { ui.dismissed = true; lastLook = Date.now(); markSeen(); render(); return; }
+    if (a === 'viewas') { ui.viewAs = t.getAttribute('data-name') || null; ui.tab = 'mine'; ui.openChain = null; render(); window.scrollTo(0, 0); return; }
     if (a === 'chainopen') { ui.openChain = ui.openChain === id ? null : id; render(); return; }
     if (a === 'addchain') { ui.addChain = !ui.addChain; render(); return; }
     if (a === 'chainstep') {

@@ -230,7 +230,7 @@ async function uiTests() {
   });
   await check('phone: first open shows How it works; Got it hides it & the footer brings it back', async function () {
     await page.evaluate(function () { localStorage.removeItem('hymn_tour1'); }); await page.reload(); await page.waitForSelector('.todo');
-    assert(/Your kit/.test(await page.textContent('#tour')) && /Ask or give a task/.test(await page.textContent('#tour')));
+    assert(/kit you're bringing/.test(await page.textContent('#tour')) && /Give a task/.test(await page.textContent('#tour')));
     await page.click('[data-act=tourdone]');
     assert(!(await page.$('#tour')));
     await page.reload(); await page.waitForSelector('.todo');
@@ -305,9 +305,9 @@ async function uiTests() {
     assert(/James Burns/.test(c.listed), JSON.stringify(c));
     assert(!/Camera kit list/.test(await page.textContent('.todo')));
     await page.click('[data-tab=kit]');
-    assert(/Waiting on Elliot/.test(await page.textContent('.chains')), await page.textContent('.chains'));
+    assert(/Elliot to OK/.test(await page.textContent('.chains')), await page.textContent('.chains'));
     assert(/Remind/.test(await page.textContent('.chains')));
-    await page.click('.chain-row .top');
+    await page.click('.chains .cmain');
     assert(/DP OK/.test(await page.textContent('.chain-steps')));
     await page.click('[data-act=chainremind]');
     assert(/^@Elliot camera kit list/.test(await page.inputValue('#say_text')));
@@ -432,6 +432,16 @@ async function uiTests() {
     await ep.click('form[data-form=booking] button[type=submit]');
     await ep.waitForFunction(function () { return !document.getElementById('status').classList.contains('show') && !/No Spark/.test(document.body.textContent); });
     assert(b.get({ a: 'state', k: 'ADMIN1' }).crew.some(function (c) { return c.name === 'Sam Spark' && c.dept === 'Lighting'; }));
+  });
+  await check('desktop: Elliot can see it as one of the crew, & nothing saves while he does', async function () {
+    await ep.click('[data-tab=crew]');
+    var rows = await ep.$$('li.person');
+    for (var r of rows) { if ((await r.textContent()).indexOf('Milo Brown') >= 0) { await (await r.$('.body')).click(); break; } }
+    await ep.click('[data-act=viewas]');
+    assert(/Seeing it as Milo Brown/.test(await ep.textContent('.viewas')));
+    assert(/Milo Brown/.test(await ep.textContent('header')));
+    await ep.click('.viewas button');
+    assert(!(await ep.$('.viewas')));
   });
   await check('desktop: Elliot confirms an item', async function () {
     await ep.click('[data-tab=kit]');
