@@ -216,7 +216,23 @@ async function uiTests() {
     var w = await page.evaluate(function () { return [document.documentElement.scrollWidth, innerWidth]; });
     assert(w[0] <= w[1], w.join(' > '));
   });
+  await check('phone: a crew link opens on their own page: documents, their to-dos & flags about them', async function () {
+    raw(b, 'ADMIN1', { a: 'add', tab: 'flags', row: { id: 'fj1', job: 'test', text: 'James: is the backpack on the quote?', status: 'open', raised_by: 'Inbox check' } });
+    raw(b, 'ADMIN1', { a: 'add', tab: 'flags', row: { id: 'fm1', job: 'test', text: 'Milo to confirm the focus package', status: 'open', raised_by: 'Inbox check' } });
+    await page.reload(); await page.waitForSelector('.todo');
+    assert(/Me/.test(await page.textContent('nav button.on')));
+    assert(/Your own page/.test(await page.textContent('.hint')));
+    assert((await page.textContent('.docs a')).includes('Call sheet v7'));
+    var t = await page.textContent('.todo');
+    assert(/Check Rialto is on the quote/.test(t) && /backpack on the quote/.test(t) && !/Milo to confirm/.test(t), t);
+    assert(!/Send focus quote/.test(t), 'Milo\'s task showed for James');
+  });
+  await check('phone: tabs are named for what they hold', async function () {
+    var names = await page.$$eval('nav button', function (l) { return l.map(function (b) { return b.textContent.replace(/\s*\(.*$/, '').trim(); }); });
+    assert.deepStrictEqual(names, ['Me', 'Kit', 'Plan', 'Crew', 'Changes']);
+  });
   await check('phone: flags show no-supplier and unconfirmed', async function () {
+    await page.click('[data-tab=kit]');
     var t = await page.textContent('.flags'); if (/Show all/.test(t)) { await page.click('[data-act=allflags]'); t = await page.textContent('.flags'); }
     assert(/no supplier: NDs/.test(t) && /not confirmed/.test(t), t);
   });

@@ -213,3 +213,10 @@ textarea:focus { outline: none; }
 /* To send (Elliot only): ready-to-copy replies */
 .tosend .msgtext { white-space: pre-wrap; word-wrap: break-word; font: inherit; margin: 6px 0; padding: 8px; background: var(--hover); }
 .tosend .body { cursor: default; }
+/* Me page: hint under the tabs, hello line, documents first, flags in the to-do list */
+.hint { margin: 4px 0 12px; }
+.hello { margin: 4px 0 12px; font-size: 16px; }
+.docs { background: var(--hover); border-radius: 4px; padding: 12px 16px 8px; }
+.docs h2 { font-size: 16px; margin-bottom: 4px; }
+.flagrow > .flagmark { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: none; font-weight: 600; }
+.flagrow .body { cursor: default; }

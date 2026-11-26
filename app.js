@@ -17,7 +17,7 @@
 
   var S = load('hymn_state_' + key + '_' + job) || load('hymn_state_' + key);   // last state from the server
   var queue = load('hymn_queue_' + key) || [];
-  var ui = { tab: store('hymn_tab') || 'kit', filter: 'all', open: null, adding: false, editJob: false, addCrew: false, crewOpen: null };
+  var ui = { tab: store('hymn_tab2') || 'mine', filter: 'all', open: null, adding: false, editJob: false, addCrew: false, crewOpen: null };
   var status = { text: '', bad: false };
   var busy = false, pollTimer = null, lastOk = 0;
 
@@ -301,7 +301,8 @@
 
     var h = '<div class="wrap">' + header() + tabs() + '<main>';
     if (S.loading) h += '<p class="grey gap">Loading…</p>';
-    else if (ui.tab !== 'log') h += asksBlock() + sinceBlock();
+    else h += hint();
+    if (!S.loading && ui.tab !== 'log') h += asksBlock() + sinceBlock();
     if (S.loading) {}
     else if (ui.tab === 'kit') h += kitView();
     else if (ui.tab === 'mine') h += mineView();
@@ -362,10 +363,10 @@
 
   function tabs() {
     var flags = openFlags().length;
-    var t = [['kit', 'Kit'], ['mine', 'Mine'], ['notes', 'Notes'], ['crew', 'Crew'], ['log', 'Log']];
+    var t = [['mine', 'Me'], ['kit', 'Kit'], ['notes', 'Plan'], ['crew', 'Crew'], ['log', 'Changes']];
     return '<nav>' + t.map(function (x) {
       var extra = '';
-      if (x[0] === 'mine') { var open = myTasks().filter(function (k) { return !k.done; }).length + toSend().length; if (open) extra = ' (' + open + ')'; }
+      if (x[0] === 'mine') { var open = myTasks().filter(function (k) { return !k.done; }).length + myFlags().length + toSend().length; if (open) extra = ' (' + open + ')'; }
       if (x[0] === 'kit' && flags) extra = ' <span class="red">(' + flags + ')</span>';
       return '<button class="' + (ui.tab === x[0] || (x[0] === 'notes' && ui.tab === 'shots') ? 'on' : '') + '" data-tab="' + x[0] + '">' + x[1] + extra + '</button>';
     }).join('') + '</nav>';
@@ -542,22 +543,68 @@
     return h + '</ul></section>';
   }
 
+  // One line under the tabs so crew know what each one is for.
+  var HINTS = {
+    mine: 'Your own page: the documents, what you need to do & your kit. Tick things off as you go.',
+    kit: 'Every bit of kit for the shoot, by department. Tap an item to see who brings it & tick it when it\'s packed.',
+    notes: 'The plan from Elliot: documents, schedule, camera, light & look.',
+    shots: 'The plan from Elliot: documents, schedule, camera, light & look.',
+    crew: 'Who\'s on the job & how to reach them.',
+    log: 'Everything that\'s changed on this sheet, newest first.'
+  };
+  function hint() { return HINTS[ui.tab] ? '<p class="hint grey small">' + esc(HINTS[ui.tab]) + '</p>' : ''; }
+
+  // The "## Documents" lines from the notes, so everyone starts from the same files.
+  function docLines() {
+    var d = sections().filter(function (x) { return /^documents/i.test(x.title); })[0];
+    return d ? d.lines.map(function (l) { var b = l.match(/^\s*[-•]\s+(.*)/); return b ? b[1] : l.trim(); }).filter(Boolean) : [];
+  }
+  function docsBlock() {
+    var d = docLines();
+    if (!d.length) return '';
+    return '<section class="docs"><h2>Documents <span class="grey">(start here)</span></h2><ul class="bul">' + d.map(function (l) { return '<li>' + linkify(l) + '</li>'; }).join('') + '</ul></section>';
+  }
+
+  // Open flags that are about you: they name you, you raised them, or they're about your kit. Elliot sees them all.
+  function myFlags() {
+    var open = (S.flags || []).filter(function (f) { return f.status !== 'sorted'; });
+    if (S.me.admin) return open;
+    var name = first(S.me.name).replace(/[^\w]/g, '');
+    var re = name.length > 1 ? new RegExp('\\b' + name + '\\b', 'i') : null;
+    var kit = myItems().map(function (i) { return String(i.item).toLowerCase(); });
+    return open.filter(function (f) {
+      var t = String(f.text || '');
+      return (re && (re.test(t) || re.test(f.raised_by || ''))) || kit.some(function (k) { return k.length > 3 && t.toLowerCase().indexOf(k) >= 0; });
+    });
+  }
+  function flagRow(f) {
+    var h = '<li class="item flagrow"><span class="flagmark red">!</span><div class="body"><div class="name">' + esc(f.text) + '</div>';
+    h += '<div class="meta">Flag' + (f.raised_by || f.source ? ' · ' + esc(f.raised_by || f.source) : '') + (f.time ? ', ' + esc(f.time) : '') + '</div></div>';
+    if (S.me.admin) h += '<button class="link" data-act="flag" data-id="' + esc(f.id) + '">Sorted</button>';
+    return h + '</li>';
+  }
+
   function mineView() {
     var h = toSendBlock();
-    var mt = myTasks();
-    h += '<section><h2>My tasks <span class="grey">(' + mt.filter(function (t) { return t.done; }).length + '/' + mt.length + ')</span></h2>';
-    if (!mt.length) h += '<p class="grey">Nothing for you yet.</p>';
-    h += '<ul class="items">' + mt.map(taskRow).join('') + '</ul></section>';
+    var meRow = S.crew.filter(function (c) { return same(c.name, S.me.name); })[0] || {};
+    if (!S.me.admin) h += '<p class="hello">Hi ' + esc(first(S.me.name)) + '. Start with the documents, then work down your list.</p>';
+    h += docsBlock();
+    var mt = myTasks(), todo = mt.filter(function (t) { return !t.done; }), done = mt.filter(function (t) { return t.done; }), mf = myFlags();
+    h += '<section class="todo"><h2>Your to-dos <span class="grey">(' + (todo.length + mf.length) + ')</span></h2>';
+    if (!todo.length && !mf.length) h += '<p class="grey">Nothing for you right now.</p>';
+    h += '<ul class="items">' + todo.map(taskRow).join('') + mf.map(flagRow).join('') + '</ul></section>';
 
     if (!S.me.admin) {
-      var meRow = S.crew.filter(function (c) { return same(c.name, S.me.name); })[0] || {};
+      var reads = sectionsFor(meRow).map(function (x) { return x.title; });
+      if (reads.length) h += '<section><h2>Read in the plan</h2><p>' + reads.map(esc).join(' · ') + '</p><p><button class="link" data-act="tab" data-t="notes">Open the plan</button></p></section>';
       var mi = myItems();
-      h += '<section><h2>My kit <span class="grey">(' + mi.length + ')</span></h2>';
+      h += '<section><h2>Your kit <span class="grey">(' + mi.length + ')</span></h2><p class="grey small">Kit you bring or asked for. Tick it when it\'s packed.</p>';
       h += '<ul class="items">' + mi.map(itemRow).join('') + '</ul>';
       h += addItemBlock();
       h += '<p class="gap"><button class="wide' + (meRow.kit_done ? ' on' : '') + '" data-act="kitdone">' + (meRow.kit_done ? 'My kit is all on the sheet · ' + esc(meRow.kit_done) : 'I\'ve added all my kit') + '</button></p>';
       h += '<p><a class="btn wide-btn update" target="_blank" rel="noopener" href="' + esc(myUpdate()) + '">Send my update</a></p></section>';
     }
+    if (done.length) h += '<section><h2>Done <span class="grey">(' + done.length + ')</span></h2><ul class="items">' + done.map(taskRow).join('') + '</ul></section>';
     h += askForm() + asksList();
     h += taskAdder();
 
@@ -851,7 +898,7 @@
     if (e.target.closest('a')) return; // links (call, email, WhatsApp) just open
     var t = e.target.closest('[data-tab],[data-act]');
     if (!t) return;
-    if (t.hasAttribute('data-tab')) { ui.tab = t.getAttribute('data-tab'); store('hymn_tab', ui.tab); ui.open = null; render(); window.scrollTo(0, 0); return; }
+    if (t.hasAttribute('data-tab')) { ui.tab = t.getAttribute('data-tab'); store('hymn_tab2', ui.tab); ui.open = null; render(); window.scrollTo(0, 0); return; }
     var a = t.getAttribute('data-act'), id = t.getAttribute('data-id');
     if (a === 'filter') { ui.filter = ui.filter === t.getAttribute('data-f') ? 'all' : t.getAttribute('data-f'); ui.tab = 'kit'; render(); return; }
     if (a === 'openitem') { ui.open = ui.open === id ? null : id; render(); return; }
@@ -872,13 +919,13 @@
     }
     if (a === 'givelink') { send({ a: 'give_link', key: t.getAttribute('data-key') }); return; }
     if (a === 'seenanswers') { save('hymn_asks_' + key, askSeen().concat(newAnswers().map(function (q) { return q.id; })).slice(-200)); render(); return; }
-    if (a === 'askitem') { var ai = findItem(id); ui.askAbout = ai ? ai.item : ''; ui.askTo = ai && ai.owner && !same(ai.owner, S.me.name) ? ai.owner : 'Elliot'; ui.open = null; ui.tab = 'mine'; store('hymn_tab', 'mine'); render(); var af = document.getElementById('askform'); if (af) af.scrollIntoView(); var at = document.getElementById('ask_text'); if (at) at.focus(); return; }
+    if (a === 'askitem') { var ai = findItem(id); ui.askAbout = ai ? ai.item : ''; ui.askTo = ai && ai.owner && !same(ai.owner, S.me.name) ? ai.owner : 'Elliot'; ui.open = null; ui.tab = 'mine'; store('hymn_tab2', 'mine'); render(); var af = document.getElementById('askform'); if (af) af.scrollIntoView(); var at = document.getElementById('ask_text'); if (at) at.focus(); return; }
     if (a === 'askclear') { ui.askAbout = ''; render(); return; }
     if (a === 'delask') { send({ a: 'delete_ask', id: id }, function () { S.asks = asks().filter(function (q) { return q.id !== id; }); }); return; }
     if (a === 'booknow') { var br = t.getAttribute('data-role'); ui.booking = br && ui.booking !== br ? br : null; render(); var bn = document.getElementById('book_name'); if (bn) bn.focus(); return; }
     if (a === 'givebooking') { send({ a: 'give_booking', id: id }); return; }
     if (a === 'gotit') { ui.dismissed = true; lastLook = Date.now(); markSeen(); render(); return; }
-    if (a === 'tab') { ui.tab = t.getAttribute('data-t'); store('hymn_tab', ui.tab); render(); return; }
+    if (a === 'tab') { ui.tab = t.getAttribute('data-t'); store('hymn_tab2', ui.tab); render(); return; }
     if (a === 'editjob') { ui.editJob = !ui.editJob; render(); return; }
     if (a === 'addcrew') { ui.addCrew = !ui.addCrew; render(); return; }
     if (a === 'crewopen') { var n = +t.getAttribute('data-n'); ui.crewOpen = ui.crewOpen === n ? null : n; render(); return; }
