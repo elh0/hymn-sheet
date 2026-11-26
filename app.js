@@ -663,8 +663,11 @@
     if (st) h += '<div class="next">Waiting on <span class="who">' + esc(same(who, S.me.name) ? 'you' : first(who) || '?') + '</span> ' + esc(st[3]) + (c.due && n === 0 ? ', by ' + esc(c.due) : '') + '</div>';
     else h += '<div class="next done">All done</div>';
     if (!open) {
-      var rest = STEPS.map(function (x, i) { return c[x[0]] ? x[1] + ' ✓' : i > n ? first(stepOwner(c, x[0])) + ' ' + x[1].toLowerCase() : ''; }).filter(Boolean).slice(0, 3);
-      h += '<div class="steps">' + esc(rest.join(' · ')) + '</div>';
+      var VERB = { listed: 'Listed by', ok: 'OK\'d by', confirmed: 'Confirmed by', prepped: 'Prepped by', onset: 'On set with' };
+      var DO = { listed: 'lists', ok: 'OKs', confirmed: 'confirms', prepped: 'preps', onset: 'brings it to set' };
+      var done = STEPS.filter(function (x) { return c[x[0]]; }).map(function (x) { return VERB[x[0]] + ' ' + first(String(c[x[0]]).split(' · ')[0]) + ' ✓'; });
+      var todo = STEPS.filter(function (x, i) { return i > n && !c[x[0]]; }).map(function (x) { return first(stepOwner(c, x[0])) + ' ' + DO[x[0]]; });
+      h += '<div class="steps">' + esc(done.concat(todo.length ? ['then ' + todo.slice(0, 2).join(', ')] : []).join(' · ')) + '</div>';
     } else {
       h += '<ol class="chain-steps">' + STEPS.map(function (x, i) {
         var done = c[x[0]], o = stepOwner(c, x[0]);
