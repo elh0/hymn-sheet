@@ -545,10 +545,10 @@
 
   // One line under the tabs so crew know what each one is for.
   var HINTS = {
-    mine: 'Your own page: the documents, what you need to do & your kit. Tick things off as you go.',
+    mine: 'Your own page: the DP notes, what you need to do, your part of the plan & your kit. Tap a button to jump to it.',
     kit: 'Every bit of kit for the shoot, by department. Tap an item to see who brings it & tick it when it\'s packed.',
-    notes: 'The plan from Elliot: documents, schedule, camera, light & look.',
-    shots: 'The plan from Elliot: documents, schedule, camera, light & look.',
+    notes: 'The plan from Elliot: documents, schedule, camera, light & look. Tap a heading below to jump to it.',
+    shots: 'The plan from Elliot: documents, schedule, camera, light & look. Tap a heading below to jump to it.',
     crew: 'Who\'s on the job & how to reach them.',
     log: 'Everything that\'s changed on this sheet, newest first.'
   };
@@ -562,20 +562,63 @@
   function docsBlock() {
     var d = docLines();
     if (!d.length) return '';
-    return '<section class="docs"><h2>Documents <span class="grey">(start here)</span></h2><ul class="doclist">' + d.map(function (l) { return '<li>' + linkify(l) + '</li>'; }).join('') + '</ul></section>';
+    return '<section class="docs" id="docs"><h2>All documents</h2><ul class="doclist">' + d.map(function (l) { return '<li>' + linkify(l) + '</li>'; }).join('') + '</ul></section>';
   }
 
-  // Open flags that are about you: they name you, you raised them, or they're about your kit. Elliot sees them all.
+  // Which flags land on whose page, by what the flag is about. A flag can also name people in its "to" column.
+  var FLAG_WORDS = {
+    steadicam: ['steadicam', 'handheld', 'hand held', 'backpack', 'walk'],
+    // Camera kit a Steadicam op should know about (weight, lenses, focus), without the codecs & drives.
+    rig: ['lens', 'prime', 'zoom', 'rialto', 'ember', 'filter', 'focus', 'ff4', 'ff5', 'zmu', 'alura', 'optimo'],
+    Camera: ['camera', 'lens', 'prime', 'zoom', 'venice', 'rialto', 'ember', 'filter', 'focus', 'ff4', 'ff5', 'zmu', 'codec', 'sticks', 's35', 'alura', 'optimo', 'scoopic', 'monitor'],
+    Focus: ['camera', 'lens', 'prime', 'zoom', 'venice', 'rialto', 'ember', 'filter', 'focus', 'ff4', 'ff5', 'zmu', 'codec', 'sticks', 's35', 'alura', 'optimo', 'scoopic', 'monitor'],
+    Lighting: ['light', 'lamp', 'gaffer', 'genny', 'power', 'hmi', '18k', '9k', '5k', 'fresnel', 'brute', 'lightstar', 'sunrise'],
+    Grip: ['jib', 'dolly', 'track', 'grip', 'slider', 'crane', 'rickshaw', 'sunrise'],
+    DIT: ['codec', 'drive', 'dit', 'lut', 'data', 'filmbox', 'dehancer', 'monitor'],
+    Video: ['monitor', 'playback', 'teradek', 'video']
+  };
+  function hasWord(t, words) { t = ' ' + t.toLowerCase() + ' '; return words.some(function (w) { return new RegExp('[^a-z0-9]' + w.replace(/\s/g, '\\s') + '[^a-z]').test(t); }); }
+  function sheetFlags() { return (S.flags || []).filter(function (f) { return f.status !== 'sorted'; }); }
+  // Steadicam ops get Steadicam flags as theirs & other camera flags to think about; everyone else gets their department's.
+  function flagWordsFor(c) {
+    var role = String(c.role || '').toLowerCase();
+    if (/steadicam|handheld/.test(role)) return { main: FLAG_WORDS.steadicam, think: FLAG_WORDS.rig };
+    return { main: FLAG_WORDS[c.dept] || [], think: [] };
+  }
+  // Open flags that are about you: they name you, you raised them, they're about your kit or your department. Elliot sees them all.
   function myFlags() {
-    var open = (S.flags || []).filter(function (f) { return f.status !== 'sorted'; });
+    var open = sheetFlags();
     if (S.me.admin) return open;
-    var name = first(S.me.name).replace(/[^\w]/g, '');
-    var re = name.length > 1 ? new RegExp('\\b' + name + '\\b', 'i') : null;
+    var meRow = S.crew.filter(function (c) { return same(c.name, S.me.name); })[0] || {};
+    var re = nameRe(S.me.name);
     var kit = myItems().map(function (i) { return String(i.item).toLowerCase(); });
+    var words = flagWordsFor(meRow).main;
     return open.filter(function (f) {
       var t = String(f.text || '');
-      return (re && (re.test(t) || re.test(f.raised_by || ''))) || kit.some(function (k) { return k.length > 3 && t.toLowerCase().indexOf(k) >= 0; });
+      if (f.to) return re && re.test(f.to);
+      if (re && (re.test(t) || re.test(f.raised_by || ''))) return true;
+      if (namesSomeone(t)) return false; // it names someone else: theirs, not the whole department's
+      return kit.some(function (k) { return k.length > 3 && t.toLowerCase().indexOf(k) >= 0; }) || (words.length && hasWord(t, words));
     });
+  }
+  // How a flag names someone: their first name, or their full name when two crew share a first name (Jack & Jack).
+  function nameRe(name) {
+    var f = first(name).replace(/[^\w]/g, '');
+    if (f.length < 2) return null;
+    var shared = S.crew.filter(function (c) { return same(first(c.name), f); }).length > 1;
+    var w = shared ? String(name).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : f;
+    return new RegExp('\\b' + w + '\\b', 'i');
+  }
+  function namesSomeone(t) {
+    return S.crew.some(function (c) { var r = first(c.name).length > 2 && nameRe(c.name); return r && r.test(t); });
+  }
+  // Flags near your job that aren't yours to sort, just worth a think (e.g. camera flags for the Steadicam op).
+  function thinkFlags() {
+    if (S.me.admin) return [];
+    var meRow = S.crew.filter(function (c) { return same(c.name, S.me.name); })[0] || {};
+    var w = flagWordsFor(meRow).think, mine = myFlags();
+    if (!w.length) return [];
+    return sheetFlags().filter(function (f) { return mine.indexOf(f) < 0 && !f.to && hasWord(String(f.text || ''), w); });
   }
   function flagRow(f) {
     var h = '<li class="item flagrow"><span class="flagmark red">!</span><div class="body"><div class="name">' + esc(f.text) + '</div>';
@@ -584,21 +627,44 @@
     return h + '</li>';
   }
 
+  // The one document most people open first (the DP notes deck), shown big at the top.
+  function mainDoc() {
+    var d = docLines(), m = null;
+    d.some(function (l) { if (/dp notes|deck/i.test(l) && /https?:/.test(l)) { m = l; return true; } });
+    return m || d[0] || '';
+  }
+  function jump(to, label, n) { return '<button class="chip" data-act="jump" data-to="' + esc(to) + '">' + esc(label) + (n != null ? ' <span class="grey">' + n + '</span>' : '') + '</button>'; }
+  function secId(title) { return 'sec-' + String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+
   function mineView() {
     var h = toSendBlock();
     var meRow = S.crew.filter(function (c) { return same(c.name, S.me.name); })[0] || {};
-    if (!S.me.admin) h += '<p class="hello">Hi ' + esc(first(S.me.name)) + '. Start with the documents, then work down your list.</p>';
-    h += docsBlock();
-    var mt = myTasks(), todo = mt.filter(function (t) { return !t.done; }), done = mt.filter(function (t) { return t.done; }), mf = myFlags();
-    h += '<section class="todo"><h2>Your to-dos <span class="grey">(' + (todo.length + mf.length) + ')</span></h2>';
+    var mt = myTasks(), todo = mt.filter(function (t) { return !t.done; }), done = mt.filter(function (t) { return t.done; }), mf = myFlags(), tf = thinkFlags();
+    var reads = S.me.admin ? [] : sectionsFor(meRow).map(function (x) { return x.title; });
+    var mi = S.me.admin ? [] : myItems(), docs = docLines();
+    if (!S.me.admin) h += '<p class="hello">Hi ' + esc(first(S.me.name)) + '. Open the DP notes, then work down your list.</p>';
+
+    // Start here: the DP notes deck, then a jump to each part of this page.
+    var md = mainDoc();
+    h += '<section class="start">';
+    if (md) h += '<div class="maindoc">' + linkify(md) + '</div>';
+    h += '<div class="chips">' + jump('todo', 'To-dos', todo.length + mf.length);
+    if (tf.length) h += jump('think', 'To think about', tf.length);
+    if (reads.length) h += jump('plan', 'Your plan', reads.length);
+    if (!S.me.admin) h += jump('mykit', 'Your kit', mi.length);
+    if (docs.length) h += jump('docs', 'All documents', docs.length);
+    h += '</div></section>';
+
+    h += '<section class="todo" id="todo"><h2>Your to-dos <span class="grey">(' + (todo.length + mf.length) + ')</span></h2>';
     if (!todo.length && !mf.length) h += '<p class="grey">Nothing for you right now.</p>';
     h += '<ul class="items">' + todo.map(taskRow).join('') + mf.map(flagRow).join('') + '</ul></section>';
+    if (tf.length) h += '<section id="think"><h2>To think about <span class="grey">(' + tf.length + ')</span></h2><p class="grey small">Not yours to sort, but they touch your job.</p><ul class="items">' + tf.map(flagRow).join('') + '</ul></section>';
+
+    if (reads.length) h += '<section id="plan"><h2>Your plan</h2><p class="grey small">The parts of the plan for you. Tap one to go straight to it.</p><div class="chips">' + reads.map(function (r) { return '<button class="chip" data-act="gosec" data-to="' + esc(secId(r)) + '">' + esc(r) + ' →</button>'; }).join('') + '</div></section>';
+    if (docs.length) h += docsBlock();
 
     if (!S.me.admin) {
-      var reads = sectionsFor(meRow).map(function (x) { return x.title; });
-      if (reads.length) h += '<section><h2>Read in the plan</h2><p>' + reads.map(esc).join(' · ') + '</p><p><button class="link" data-act="tab" data-t="notes">Open the plan</button></p></section>';
-      var mi = myItems();
-      h += '<section><h2>Your kit <span class="grey">(' + mi.length + ')</span></h2><p class="grey small">Kit you bring or asked for. Tick it when it\'s packed.</p>';
+      h += '<section id="mykit"><h2>Your kit <span class="grey">(' + mi.length + ')</span></h2><p class="grey small">Kit you bring or asked for. Tick it when it\'s packed.</p>';
       h += '<ul class="items">' + mi.map(itemRow).join('') + '</ul>';
       h += addItemBlock();
       h += '<p class="gap"><button class="wide' + (meRow.kit_done ? ' on' : '') + '" data-act="kitdone">' + (meRow.kit_done ? 'My kit is all on the sheet · ' + esc(meRow.kit_done) : 'I\'ve added all my kit') + '</button></p>';
@@ -722,8 +788,10 @@
     }
     var secs = sections();
     if (!secs.length) h += '<p class="grey gap">No DP notes yet.</p>';
+    var named = secs.filter(function (x) { return x.title; });
+    if (named.length > 2) h += '<section class="contents"><div class="chips">' + named.map(function (x) { return '<button class="chip" data-act="jump" data-to="' + esc(secId(x.title)) + '">' + esc(x.title.replace(/\s*\(.*\)\s*$/, '')) + '</button>'; }).join('') + '</div></section>';
     secs.forEach(function (x) {
-      h += '<section class="note-sec">' + (x.title ? '<h2>' + esc(x.title) + '</h2>' : '') + '<div class="doc">';
+      h += '<section class="note-sec"' + (x.title ? ' id="' + esc(secId(x.title)) + '"' : '') + '>' + (x.title ? '<h2>' + esc(x.title) + '</h2>' : '') + '<div class="doc">';
       if (/^documents/i.test(x.title)) {
         h += '<ul class="doclist">' + x.lines.map(function (l) { var b = l.match(/^\s*[-•]\s+(.*)/); return b ? '<li>' + linkify(b[1]) + '</li>' : (l.trim() ? '<li>' + linkify(l.trim()) + '</li>' : ''); }).join('') + '</ul></div></section>';
         return;
@@ -935,6 +1003,8 @@
     if (a === 'booknow') { var br = t.getAttribute('data-role'); ui.booking = br && ui.booking !== br ? br : null; render(); var bn = document.getElementById('book_name'); if (bn) bn.focus(); return; }
     if (a === 'givebooking') { send({ a: 'give_booking', id: id }); return; }
     if (a === 'gotit') { ui.dismissed = true; lastLook = Date.now(); markSeen(); render(); return; }
+    if (a === 'jump') { var je = document.getElementById(t.getAttribute('data-to')); if (je) je.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    if (a === 'gosec') { ui.tab = 'notes'; store('hymn_tab2', 'notes'); render(); var ge = document.getElementById(t.getAttribute('data-to')); if (ge) ge.scrollIntoView(); else window.scrollTo(0, 0); return; }
     if (a === 'tab') { ui.tab = t.getAttribute('data-t'); store('hymn_tab2', ui.tab); render(); return; }
     if (a === 'editjob') { ui.editJob = !ui.editJob; render(); return; }
     if (a === 'addcrew') { ui.addCrew = !ui.addCrew; render(); return; }

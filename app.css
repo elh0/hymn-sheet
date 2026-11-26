@@ -228,3 +228,11 @@ a.doc-link { display: flex; align-items: baseline; gap: 12px; text-decoration: n
 a.doc-link .doc-name { flex: 1; min-width: 0; text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
 a.doc-link .doc-arrow { flex: none; color: var(--grey); }
 .doc-who { display: block; font-size: 13px; color: var(--grey); margin-top: 2px; }
+.start { margin-bottom: 8px; }
+.maindoc { background: var(--hover); border-radius: 4px; padding: 12px 16px; font-size: 17px; }
+.maindoc a.doc-link { font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chip { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--faint); background: transparent; color: inherit; cursor: pointer; }
+.chip:hover { background: var(--hover); }
+.contents .chips { margin-top: 0; }
+[id] { scroll-margin-top: 12px; }

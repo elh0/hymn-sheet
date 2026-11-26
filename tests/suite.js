@@ -25,6 +25,7 @@ function seed() {
     ['crew', { job: 'test', key: 'MCX1', name: 'Aduke', role: 'MCX', dept: 'Other', email: 'a@x.com' }],
     ['crew', { job: 'test', key: 'DAVO1', name: 'Davo', role: 'DIT', dept: 'DIT', email: 'd@x.com' }],
     ['crew', { job: 'test', key: 'MAX1', name: 'Maxine Carlier', role: 'Production designer', dept: 'Art', email: 'x@x.com' }],
+    ['crew', { job: 'test', key: 'JACKS1', name: 'Jackson Lana', role: 'Steadicam / handheld op', dept: 'Camera' }],
     ['crew', { job: 'other', key: 'OTHER1', name: 'Someone', role: 'Gaffer' }],
     ['items', { id: 'i1', job: 'test', dept: 'Camera', item: 'Sony Venice 8.6K w/ Rialto', qty: '1', supplier: 'MCX', asked_by: 'Elliot', owner: 'James Burns', confirmed: 'Elliot · 24 Nov 10:00' }],
     ['items', { id: 'i2', job: 'test', dept: 'Camera', item: 'NDs', supplier: 'TBC', asked_by: 'Elliot' }],
@@ -226,6 +227,39 @@ async function uiTests() {
     var t = await page.textContent('.todo');
     assert(/Check Rialto is on the quote/.test(t) && /backpack on the quote/.test(t) && !/Milo to confirm/.test(t), t);
     assert(!/Send focus quote/.test(t), 'Milo\'s task showed for James');
+  });
+  await check('phone: the top of my page has the DP notes & jumps to each part', async function () {
+    assert(await page.$('.start .maindoc a.doc-link'), 'no main doc');
+    var chips = await page.$$eval('.start .chip', function (l) { return l.map(function (b) { return b.textContent; }); });
+    assert(chips.some(function (c) { return /To-dos/.test(c); }) && chips.some(function (c) { return /Your kit/.test(c); }) && chips.some(function (c) { return /All documents/.test(c); }), chips.join('|'));
+    await page.click('.start .chip[data-to=docs]');
+    assert(await page.$('#docs'));
+  });
+  await check('phone: camera flags go to camera crew, Steadicam flags to the Steadicam op', async function () {
+    raw(b, 'ADMIN1', { a: 'add', tab: 'flags', row: { id: 'fc1', job: 'test', text: 'Does the zoom need a ZMU for wireless?', status: 'open', raised_by: 'Inbox check' } });
+    raw(b, 'ADMIN1', { a: 'add', tab: 'flags', row: { id: 'fs1', job: 'test', text: 'Crash zoom on the Steadicam: weight OK?', status: 'open', raised_by: 'Inbox check' } });
+    var st = b.get({ a: 'state', k: 'ADMIN1' });
+    var jk = st.crew.filter(function (c) { return /steadicam/i.test(c.role || ''); })[0];
+    await page.reload(); await page.waitForSelector('.todo');
+    var t = await page.textContent('.todo');
+    assert(/ZMU/.test(t), 'camera flag missing for camera crew: ' + t);
+    if (jk) {
+      var p2 = await page.context().newPage();
+      await p2.goto(page.url().replace(/k=[^&]+/, 'k=' + jk.key)); await p2.waitForSelector('.todo');
+      var t2 = await p2.textContent('.todo'), th = (await p2.$('#think')) ? await p2.textContent('#think') : '';
+      assert(/Steadicam: weight/.test(t2) && !/ZMU/.test(t2) && /ZMU/.test(th), t2 + ' || ' + th);
+      await p2.close();
+    }
+    raw(b, 'ADMIN1', { a: 'set', tab: 'flags', id: 'fc1', fields: { status: 'sorted' } });
+    raw(b, 'ADMIN1', { a: 'set', tab: 'flags', id: 'fs1', fields: { status: 'sorted' } });
+    await page.reload(); await page.waitForSelector('.todo');
+  });
+  await check('phone: a plan section opens the plan at that section', async function () {
+    var g = await page.$('#plan .chip[data-act=gosec]');
+    assert(g, 'no plan chips');
+    await g.click();
+    assert(/Plan/.test(await page.textContent('nav button.on')));
+    assert(await page.$('.contents .chip'));
   });
   await check('phone: tabs are named for what they hold', async function () {
     var names = await page.$$eval('nav button', function (l) { return l.map(function (b) { return b.textContent.replace(/\s*\(.*$/, '').trim(); }); });
