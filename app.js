@@ -1045,7 +1045,7 @@
     if (e.target.closest('a')) return; // links (call, email, WhatsApp) just open
     var t = e.target.closest('[data-tab],[data-act]');
     if (!t) return;
-    if (t.hasAttribute('data-tab')) { ui.tab = t.getAttribute('data-tab'); store('hymn_tab2', ui.tab); ui.open = null; render(); window.scrollTo(0, 0); return; }
+    if (t.hasAttribute('data-tab')) { ui.tab = t.getAttribute('data-tab'); store('hymn_tab2', ui.tab); ui.open = null; render(); if (ui.tab !== 'chat') window.scrollTo(0, 0); return; }
     var a = t.getAttribute('data-act'), id = t.getAttribute('data-id');
     if (a === 'filter') { ui.filter = ui.filter === t.getAttribute('data-f') ? 'all' : t.getAttribute('data-f'); ui.tab = 'kit'; render(); return; }
     if (a === 'openitem') { ui.open = ui.open === id ? null : id; render(); return; }

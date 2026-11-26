@@ -241,7 +241,7 @@ a.doc-link .doc-arrow { flex: none; color: var(--grey); }
 .tour li { margin: 6px 0; line-height: 1.45; }
 .tour .link { margin-left: 4px; }
 footer .link { font-size: 13px; padding: 0; }
-.chat .msgs { list-style: none; padding: 0; margin: 0 0 96px; }
+.chat .msgs { list-style: none; padding: 0; margin: 0 0 8px; }
 .chat .msg { padding: 6px 0; }
 .chat .who { font-weight: 600; margin-top: 8px; }
 .chat .who .grey { font-weight: 400; }
