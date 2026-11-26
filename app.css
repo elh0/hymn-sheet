@@ -252,3 +252,24 @@ footer .link { font-size: 13px; padding: 0; }
 .chat .say { position: sticky; bottom: 72px; display: flex; gap: 8px; background: var(--bg); padding: 8px 0; }
 .chat .say input { flex: 1; min-width: 0; }
 @media (min-width: 700px) { .chat .say { bottom: 0; } }
+.chains { margin-bottom: 8px; }
+.chain-row { border-top: 1px solid var(--faint); padding: 12px 0; }
+.chain-row .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; }
+.chain-row .top b { font-size: 16px; }
+.chain-row .bar { display: flex; gap: 3px; margin: 10px 0 8px; cursor: pointer; }
+.chain-row .bar i { flex: 1; height: 6px; border-radius: 3px; background: var(--faint); }
+.chain-row .bar i.d { background: var(--green, #4dab9a); }
+.chain-row .bar i.n { background: var(--orange, #e9a23b); }
+.chain-row .next .who { font-weight: 600; color: var(--orange, #c4791b); }
+.chain-row .next.done { color: var(--green, #4dab9a); font-weight: 600; }
+.chain-row .steps { font-size: 13px; color: var(--grey); }
+.pillbtn { font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--faint); background: transparent; color: inherit; cursor: pointer; white-space: nowrap; }
+.pillbtn.go { background: var(--blue); border-color: var(--blue); color: #fff; }
+.chain-steps { list-style: none; padding: 0; margin: 4px 0 0; }
+.chain-steps li { display: grid; grid-template-columns: 82px 1fr auto auto; gap: 8px; align-items: baseline; padding: 6px 0; font-size: 14px; }
+.chain-steps .sname { color: var(--grey); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.chain-steps li.d .sname { color: var(--green, #4dab9a); }
+.chain-steps li.n .sname, .chain-steps li.n .swhen { color: var(--orange, #c4791b); font-weight: 600; }
+.chain-steps .swhen { color: var(--grey); font-size: 13px; }
+.chain-steps .link { padding: 0; }
+.flagmark.blue { color: var(--blue); }

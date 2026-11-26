@@ -374,7 +374,7 @@
     var t = [['mine', 'Me'], ['kit', 'Kit'], ['notes', 'Plan'], ['chat', 'Chat'], ['crew', 'Crew'], ['log', 'Changes']];
     return '<nav>' + t.map(function (x) {
       var extra = '';
-      if (x[0] === 'mine') { var open = myTasks().filter(function (k) { return !k.done; }).length + myFlags().length + toSend().length; if (open) extra = ' (' + open + ')'; }
+      if (x[0] === 'mine') { var open = myTasks().filter(function (k) { return !k.done; }).length + myFlags().length + toSend().length + myChainSteps().length; if (open) extra = ' (' + open + ')'; }
       if (x[0] === 'chat' && ui.tab !== 'chat') { var un = chatUnread(); if (un) extra = ' <span class="blue">(' + un + ')</span>'; }
       if (x[0] === 'kit' && flags) extra = ' <span class="red">(' + flags + ')</span>';
       return '<button class="' + (ui.tab === x[0] || (x[0] === 'notes' && ui.tab === 'shots') ? 'on' : '') + '" data-tab="' + x[0] + '">' + x[1] + extra + '</button>';
@@ -410,7 +410,7 @@
   }
 
   function kitView() {
-    var h = flagsBlock();
+    var h = chainBlock() + flagsBlock();
     var filters = [['all', 'All'], ['unconfirmed', 'Not confirmed'], ['unpacked', 'Not packed'], ['nosupplier', 'No supplier']];
     h += '<div class="filters">' + filters.map(function (f) {
       return '<button class="' + (ui.filter === f[0] ? 'on' : '') + '" data-act="filter" data-f="' + f[0] + '">' + f[1] + '</button>';
@@ -426,7 +426,7 @@
     var names = Object.keys(groups).sort(byDept);
     if (!names.length) h += '<p class="grey gap">Nothing here.</p>';
     names.forEach(function (d) {
-      h += '<section><h2>' + esc(d) + ' <span class="grey">(' + groups[d].length + ')</span></h2><ul class="items">';
+      h += '<section id="dept-' + esc(String(d).toLowerCase()) + '"><h2>' + esc(d) + ' <span class="grey">(' + groups[d].length + ')</span></h2><ul class="items">';
       groups[d].forEach(function (i) { h += itemRow(i); });
       h += '</ul></section>';
     });
@@ -637,6 +637,73 @@
     return h + '</li>';
   }
 
+  /* ---------- kit lists: five steps each, one line per list ---------- */
+  var STEPS = [
+    ['listed', 'Listed', 'Mark it listed', 'for the list'],
+    ['ok', 'DP OK', 'OK it', 'to OK the list'],
+    ['confirmed', 'Confirmed', 'Confirm it', 'to confirm it'],
+    ['prepped', 'Prepped', 'Mark prepped', 'to prep it'],
+    ['onset', 'On set', 'Mark on set', 'to bring it to set']];
+  function chains() { return (S && S.chain) || []; }
+  function booker() {
+    var b = S.crew.filter(function (c) { return /production manager|\bpm\b/i.test(c.role || ''); })[0] || S.crew.filter(function (c) { return BOOKER.test(c.role || ''); })[0];
+    return b ? b.name : 'Production';
+  }
+  function stepOwner(c, k) { return k === 'listed' ? c.lister : k === 'ok' ? 'Elliot' : k === 'confirmed' ? booker() : c.preps; }
+  function canStep(c, k) { return S.me.admin || (k === 'confirmed' ? BOOKER.test(S.me.role || '') : same(stepOwner(c, k), S.me.name)); }
+  function nextStep(c) { for (var n = 0; n < STEPS.length; n++) if (!c[STEPS[n][0]]) return n; return -1; }
+  function shortStamp(v) { var p = String(v || '').split(' · '); return p.length > 1 ? first(p[0]) + ' ' + p[1] : v; }
+  function chainRow(c) {
+    var n = nextStep(c), open = ui.openChain === c.id, h = '<div class="chain-row' + (open ? ' open' : '') + '">';
+    var st = n >= 0 ? STEPS[n] : null, who = st ? stepOwner(c, st[0]) : '';
+    h += '<div class="top" data-act="chainopen" data-id="' + esc(c.id) + '"><b>' + esc(c.list) + '</b>';
+    if (st && canStep(c, st[0])) h += '<button class="pillbtn go" data-act="chainstep" data-id="' + esc(c.id) + '" data-step="' + st[0] + '">' + esc(st[2]) + '</button>';
+    else if (st && who) h += '<button class="pillbtn" data-act="chainremind" data-id="' + esc(c.id) + '">Remind</button>';
+    h += '</div><div class="bar" data-act="chainopen" data-id="' + esc(c.id) + '">' + STEPS.map(function (x, i) { return '<i class="' + (c[x[0]] ? 'd' : i === n ? 'n' : '') + '"></i>'; }).join('') + '</div>';
+    if (st) h += '<div class="next">Waiting on <span class="who">' + esc(same(who, S.me.name) ? 'you' : first(who) || '?') + '</span> ' + esc(st[3]) + (c.due && n === 0 ? ', by ' + esc(c.due) : '') + '</div>';
+    else h += '<div class="next done">All done</div>';
+    if (!open) {
+      var rest = STEPS.map(function (x, i) { return c[x[0]] ? x[1] + ' ✓' : i > n ? first(stepOwner(c, x[0])) + ' ' + x[1].toLowerCase() : ''; }).filter(Boolean).slice(0, 3);
+      h += '<div class="steps">' + esc(rest.join(' · ')) + '</div>';
+    } else {
+      h += '<ol class="chain-steps">' + STEPS.map(function (x, i) {
+        var done = c[x[0]], o = stepOwner(c, x[0]);
+        var r = '<li class="' + (done ? 'd' : i === n ? 'n' : '') + '"><span class="sname">' + esc(x[1]) + '</span><span class="sowner">' + esc(o || '?') + '</span><span class="swhen">' + esc(done ? shortStamp(done) : i === n ? 'waiting' : '') + '</span>';
+        if (canStep(c, x[0]) && (done || i === n)) r += '<button class="link small" data-act="chainstep" data-id="' + esc(c.id) + '" data-step="' + x[0] + '">' + (done ? 'Undo' : 'Done') + '</button>';
+        return r + '</li>';
+      }).join('') + '</ol>';
+      var cnt = S.items.filter(function (i) { return same(i.dept, c.list); }).length;
+      if (cnt) h += '<p><button class="link" data-act="jump" data-to="dept-' + esc(String(c.list).toLowerCase()) + '">See the ' + cnt + ' item' + (cnt > 1 ? 's' : '') + ' ↓</button></p>';
+    }
+    return h + '</div>';
+  }
+  function chainBlock() {
+    var cs = chains();
+    if (!cs.length && !S.me.admin) return '';
+    var h = '<section class="chains"><h2>Kit lists</h2><p class="grey small">Each bar is the five steps: listed, DP OK, confirmed, prepped, on set. Orange is who\'s up next. Tap a list for the detail.</p>';
+    h += cs.map(chainRow).join('');
+    if (S.me.admin) {
+      if (!ui.addChain) h += '<p><button class="link" data-act="addchain">+ Add a kit list</button></p>';
+      else {
+        h += '<form class="box" data-form="chain"><h2>Add a kit list</h2>';
+        h += '<label>List<select name="list">' + DEPTS.map(function (d) { return '<option>' + d + '</option>'; }).join('') + '</select></label>';
+        h += '<label>Who lists it<select name="lister"><option></option>' + S.crew.map(function (c) { return '<option>' + esc(c.name) + '</option>'; }).join('') + '</select></label>';
+        h += '<label>Who preps & brings it<select name="preps"><option></option>' + S.crew.map(function (c) { return '<option>' + esc(c.name) + '</option>'; }).join('') + '</select></label>';
+        h += '<label>List due<input name="due" placeholder="e.g. Mon 30 Nov"></label>';
+        h += '<div class="row"><button type="submit">Add</button><button type="button" class="link" data-act="addchain">Cancel</button></div></form>';
+      }
+    }
+    return h + '</section>';
+  }
+  // Steps waiting on me, for my to-dos.
+  function myChainSteps() {
+    return chains().filter(function (c) { var n = nextStep(c); return n >= 0 && (S.me.admin ? same(stepOwner(c, STEPS[n][0]), 'Elliot') : canStep(c, STEPS[n][0])); });
+  }
+  function chainTodoRow(c) {
+    var st = STEPS[nextStep(c)];
+    return '<li class="item flagrow"><span class="flagmark blue">→</span><div class="body"><div class="name">' + esc(c.list) + ' kit list: ' + esc(st[2].toLowerCase()) + '</div><div class="meta">Kit list step' + (c.due && st[0] === 'listed' ? ' · by ' + esc(c.due) : '') + '</div></div><button class="link" data-act="chainstep" data-id="' + esc(c.id) + '" data-step="' + st[0] + '">' + esc(st[2]) + '</button></li>';
+  }
+
   /* ---------- job chat ---------- */
   function chat() { return ((S && S.chat) || []).slice(-150); }
   function chatSeenKey() { return 'hymn_chat_' + key + '_' + (S && S.job ? S.job.job : job); }
@@ -707,7 +774,7 @@
   function mineView() {
     var h = toSendBlock();
     var meRow = S.crew.filter(function (c) { return same(c.name, S.me.name); })[0] || {};
-    var mt = myTasks(), todo = mt.filter(function (t) { return !t.done; }), done = mt.filter(function (t) { return t.done; }), mf = myFlags(), tf = thinkFlags();
+    var mt = myTasks(), todo = mt.filter(function (t) { return !t.done; }), done = mt.filter(function (t) { return t.done; }), mf = myFlags(), tf = thinkFlags(), mc = myChainSteps();
     var reads = S.me.admin ? [] : sectionsFor(meRow).map(function (x) { return x.title; });
     var mi = S.me.admin ? [] : myItems(), docs = docLines();
     if (!S.me.admin) h += '<p class="hello">Hi ' + esc(first(S.me.name)) + '. Open the DP notes, then work down your list.</p>';
@@ -717,16 +784,16 @@
     var md = mainDoc();
     h += '<section class="start">';
     if (md) h += '<div class="maindoc">' + linkify(md) + '</div>';
-    h += '<div class="chips">' + jump('todo', 'To-dos', todo.length + mf.length);
+    h += '<div class="chips">' + jump('todo', 'To-dos', todo.length + mf.length + mc.length);
     if (tf.length) h += jump('think', 'To think about', tf.length);
     if (reads.length) h += jump('plan', 'Your plan', reads.length);
     if (!S.me.admin) h += jump('mykit', 'Your kit', mi.length);
     if (docs.length) h += jump('docs', 'All documents', docs.length);
     h += '</div></section>';
 
-    h += '<section class="todo" id="todo"><h2>Your to-dos <span class="grey">(' + (todo.length + mf.length) + ')</span></h2>';
-    if (!todo.length && !mf.length) h += '<p class="grey">Nothing for you right now.</p>';
-    h += '<ul class="items">' + todo.map(taskRow).join('') + mf.map(flagRow).join('') + '</ul></section>';
+    h += '<section class="todo" id="todo"><h2>Your to-dos <span class="grey">(' + (todo.length + mf.length + mc.length) + ')</span></h2>';
+    if (!todo.length && !mf.length && !mc.length) h += '<p class="grey">Nothing for you right now.</p>';
+    h += '<ul class="items">' + mc.map(chainTodoRow).join('') + todo.map(taskRow).join('') + mf.map(flagRow).join('') + '</ul></section>';
     if (tf.length) h += '<section id="think"><h2>To think about <span class="grey">(' + tf.length + ')</span></h2><p class="grey small">Not yours to sort, but they touch your job.</p><ul class="items">' + tf.map(flagRow).join('') + '</ul></section>';
 
     if (reads.length) h += '<section id="plan"><h2>Your plan</h2><p class="grey small">The parts of the plan for you. Tap one to go straight to it.</p><div class="chips">' + reads.map(function (r) { return '<button class="chip" data-act="gosec" data-to="' + esc(secId(r)) + '">' + esc(r) + ' →</button>'; }).join('') + '</div></section>';
@@ -1072,6 +1139,21 @@
     if (a === 'booknow') { var br = t.getAttribute('data-role'); ui.booking = br && ui.booking !== br ? br : null; render(); var bn = document.getElementById('book_name'); if (bn) bn.focus(); return; }
     if (a === 'givebooking') { send({ a: 'give_booking', id: id }); return; }
     if (a === 'gotit') { ui.dismissed = true; lastLook = Date.now(); markSeen(); render(); return; }
+    if (a === 'chainopen') { ui.openChain = ui.openChain === id ? null : id; render(); return; }
+    if (a === 'addchain') { ui.addChain = !ui.addChain; render(); return; }
+    if (a === 'chainstep') {
+      var cs = t.getAttribute('data-step');
+      send({ a: 'chain_step', id: id, step: cs }, function () { var c = chains().filter(function (x) { return x.id === id; })[0]; if (c) c[cs] = c[cs] ? '' : S.me.name + ' · now'; });
+      return;
+    }
+    if (a === 'chainremind') {
+      var rc = chains().filter(function (x) { return x.id === id; })[0]; if (!rc) return;
+      var rs = STEPS[nextStep(rc)], rw = first(stepOwner(rc, rs[0]));
+      ui.tab = 'chat'; store('hymn_tab2', 'chat'); render();
+      var sti = document.getElementById('say_text');
+      if (sti) { sti.value = '@' + rw + ' ' + rc.list.toLowerCase() + ' kit list: waiting on you ' + rs[3] + (rc.due && rs[0] === 'listed' ? ' (by ' + rc.due + ')' : '') + ' '; sti.focus(); }
+      return;
+    }
     if (a === 'unsay') { send({ a: 'unsay', id: id }, function () { S.chat = chat().filter(function (m) { return m.id !== id; }); }); return; }
     if (a === 'chattask') {
       var cmsg = chat().filter(function (m) { return m.id === id; })[0];
@@ -1159,6 +1241,9 @@
       if (!v.task) return;
       clear();
       send({ a: 'add_task', who: v.who, task: v.task, due: v.due }, function () { S.tasks.push({ id: 'tmp' + Date.now(), who: v.who, task: v.task, due: v.due, done: '' }); });
+    } else if (kind === 'chain') {
+      ui.addChain = false;
+      send({ a: 'add_chain', list: v.list, lister: v.lister, preps: v.preps, due: v.due }, function () { S.chain = chains().concat([{ id: 'tmp' + Date.now(), list: v.list, lister: v.lister, preps: v.preps, due: v.due }]); });
     } else if (kind === 'say') {
       if (!v.text) return;
       clear();

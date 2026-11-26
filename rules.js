@@ -159,6 +159,27 @@
       return { a: 'del', tab: 'asks', id: qd.id, log: 'removed question: ' + qd.text };
     }
 
+    // Kit lists move through five steps; each step belongs to someone (Elliot can do any).
+    if (a === 'chain_step') {
+      var ch = find(S.chain, op.id), step = clean(op.step, 20);
+      if (!ch) return { error: 'That list has gone. Pull to refresh.' };
+      var STEP = { listed: ch.lister, ok: 'Elliot', confirmed: '@booker', prepped: ch.preps, onset: ch.preps };
+      if (!(step in STEP)) return { error: 'Unknown step.' };
+      var owner = STEP[step];
+      var mayDo = admin || (owner === '@booker' ? isProd(me) : same(owner, me.name));
+      if (!mayDo) return { error: 'That step is ' + (owner === '@booker' ? 'production\'s' : owner + '\'s') + '.' };
+      var NAMES = { listed: 'listed', ok: 'OK\'d by Elliot', confirmed: 'confirmed', prepped: 'prepped', onset: 'on set' };
+      var sf = {}; sf[step] = '@toggle';
+      return { a: 'set', tab: 'chain', id: ch.id, fields: sf, log: (ch[step] ? 'undid: ' : '') + ch.list + ' kit ' + NAMES[step] };
+    }
+    if (a === 'add_chain') {
+      if (!admin) return { error: 'Only Elliot adds kit lists.' };
+      var ln = clean(op.list, 40);
+      if (!ln) return { error: 'Which list?' };
+      return { a: 'add', tab: 'chain', log: 'new kit list: ' + ln,
+        row: { list: ln, lister: clean(op.lister, 60), preps: clean(op.preps, 60), due: clean(op.due, 40), listed: '', ok: '', confirmed: '', prepped: '', onset: '' } };
+    }
+
     // Job chat: everyone on the job can post; whoever posted (or Elliot) can remove it. Not logged, it's chat.
     if (a === 'say') {
       var said = clean(op.text, 1000);

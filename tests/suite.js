@@ -295,6 +295,25 @@ async function uiTests() {
     assert(!(await page.$('[data-act=unsay][data-id="' + mid + '"]')), 'James can remove Milo\'s message');
     await page.click('[data-tab=mine]');
   });
+  await check('phone: kit lists: the step waiting on me is on my to-dos & one tap moves it on', async function () {
+    raw(b, 'ADMIN1', { a: 'add', tab: 'chain', row: { list: 'Camera', lister: 'James Burns', preps: 'James Burns', due: 'Mon 30 Nov', listed: '', ok: '', confirmed: '', prepped: '', onset: '' } });
+    await page.reload(); await page.waitForSelector('.todo');
+    assert(/Camera kit list: mark it listed/.test(await page.textContent('.todo')), await page.textContent('.todo'));
+    await page.click('.todo [data-act=chainstep]');
+    await page.waitForFunction(function () { return !document.getElementById('status').classList.contains('show'); });
+    var c = b.get({ a: 'state', k: 'ADMIN1' }).chain[0];
+    assert(/James Burns/.test(c.listed), JSON.stringify(c));
+    assert(!/Camera kit list/.test(await page.textContent('.todo')));
+    await page.click('[data-tab=kit]');
+    assert(/Waiting on Elliot to OK the list/.test(await page.textContent('.chains')), await page.textContent('.chains'));
+    assert(/Remind/.test(await page.textContent('.chains')));
+    await page.click('.chain-row .top');
+    assert(/DP OK/.test(await page.textContent('.chain-steps')));
+    await page.click('[data-act=chainremind]');
+    assert(/^@Elliot camera kit list/.test(await page.inputValue('#say_text')));
+    await page.fill('#say_text', '');
+    await page.click('[data-tab=mine]');
+  });
   await check('phone: tabs are named for what they hold', async function () {
     var names = await page.$$eval('nav button', function (l) { return l.map(function (b) { return b.textContent.replace(/\s*\(.*$/, '').trim(); }); });
     assert.deepStrictEqual(names, ['Me', 'Kit', 'Plan', 'Chat', 'Crew', 'Changes']);
