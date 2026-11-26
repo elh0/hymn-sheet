@@ -17,7 +17,7 @@ var pw; try { pw = require('playwright'); } catch (e) { pw = require('/usr/local
 
 function seed() {
   return makeBackend([
-    ['jobs', { job: 'test', title: 'Test Job', dates: 'Thu 26 Nov', call: '07:00', location: 'Deptford', prep: 'James, MCX Wed 12:00', admin_key: 'ADMIN1', dp_notes: '## Camera & codecs\n- Venice 8.6K full res\n\n## Light\n- 20x book light' }],
+    ['jobs', { job: 'test', title: 'Test Job', dates: 'Thu 26 Nov', call: '07:00', location: 'Deptford', prep: 'James, MCX Wed 12:00', admin_key: 'ADMIN1', dp_notes: '## Documents\n- Call sheet v7: https://drive.google.com/file/d/abc/view\n\n## Camera & codecs\n- Venice 8.6K full res\n\n## Light\n- 20x book light' }],
     ['jobs', { job: 'other', title: 'Other Job', admin_key: 'ADMIN2' }],
     ['crew', { job: 'test', key: 'JAMES1', name: 'James Burns', role: '2nd AC', dept: 'Camera', email: 'j@x.com', phone: '07500 000000' }],
     ['crew', { job: 'test', key: 'MILO1', name: 'Milo Brown', role: '1st AC', dept: 'Focus', email: 'm@x.com' }],
@@ -359,6 +359,8 @@ async function uiTests() {
     await page.click('[data-tab=notes]');
     var t = await page.textContent('main');
     assert(/Camera & codecs/.test(t) && /Venice 8.6K full res/.test(t) && /Rickshaw in low/.test(t), t.slice(0, 200));
+    var doc = await page.evaluate(function () { var a = [].filter.call(document.querySelectorAll('main a'), function (x) { return /drive\.google/.test(x.href); })[0]; return a && [a.textContent, a.href]; });
+    assert(doc && doc[0] === 'Call sheet v7 ↗' && /file\/d\/abc/.test(doc[1]), JSON.stringify(doc));
     await page.click('[data-tab=kit]');
   });
   await check('desktop: Message Davo drafts his codecs section, not the light', async function () {

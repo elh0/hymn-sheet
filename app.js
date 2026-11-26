@@ -666,7 +666,11 @@
     return h;
   }
 
-  function linkify(t) { return esc(t).replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a target="_blank" rel="noopener" href="' + u + '">' + u + '</a>'; }); }
+  // "Call sheet v7: https://..." shows as a link called "Call sheet v7" (the Documents list at the top of the notes).
+  function linkify(t) {
+    var m = String(t).match(/^(.+?):\s+(https?:\/\/\S+)\s*$/);
+    if (m && !/https?:/.test(m[1])) return '<a target="_blank" rel="noopener" href="' + esc(m[2]) + '">' + esc(m[1]) + ' ↗</a>';
+    return esc(t).replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a target="_blank" rel="noopener" href="' + u + '">' + u + '</a>'; }); }
 
   // Which notes sections matter to which department.
   var DEPT_WORDS = {
