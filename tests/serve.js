@@ -11,8 +11,8 @@ module.exports = function serve(backend, port) {
       req.on('data', function (c) { body += c; });
       req.on('end', function () {
         var out = req.method === 'POST' ? backend.post(body) : backend.get(u.query);
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify(out));
+        var reply = function () { res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify(out)); };
+        if (backend.slow) setTimeout(reply, backend.slow); else reply();
       });
       return;
     }

@@ -323,23 +323,26 @@ async function uiTests() {
     var t = await page.textContent('.flags'); if (/Show all/.test(t)) { await page.click('[data-act=allflags]'); t = await page.textContent('.flags'); }
     assert(/no supplier: NDs/.test(t) && /not confirmed/.test(t), t);
   });
-  await check('phone: a tick asks first; Cancel changes nothing', async function () {
+  await check('phone: a tick ticks straight away; Undo takes it back', async function () {
     await page.click('[data-act=pack][data-id=i1]');
-    await page.waitForSelector('.sure');
-    assert(/Sony Venice 8\.6K w\/ Rialto packed/.test(await page.textContent('.sure')) && /undo/.test(await page.textContent('.sure')));
-    await page.click('[data-act=sureno]');
-    assert(!(await page.$('.sure')));
+    await page.waitForSelector('#toast');
+    assert(/Packed · Sony Venice 8\.6K w\/ Rialto/.test(await page.textContent('#toast')));
+    await page.click('[data-act=toastundo]');
+    assert(!(await page.$('#toast')));
+    await page.waitForFunction(function () { return true; });
+    await new Promise(function (r) { setTimeout(r, 400); });
     assert(!b.get({ a: 'state', k: 'ADMIN1' }).items[0].packed);
   });
-  await check('phone: tick packed saves to the sheet', async function () {
+  await check('phone: tick packed saves to the sheet, with a note after', async function () {
     await page.click('[data-act=pack][data-id=i1]');
+    await page.click('[data-act=toastnote]');
     await page.fill('#sure_note', 'In the case, both batteries');
     await page.click('.sure button[type=submit]');
-    await page.waitForFunction(function () { return !document.getElementById('status').classList.contains('show'); });
+    await new Promise(function (r) { setTimeout(r, 600); });
     var st = b.get({ a: 'state', k: 'ADMIN1' });
     assert(/James Burns/.test(st.items[0].packed));
     assert(/In the case, both batteries/.test(st.items[0].notes), st.items[0].notes);
-    assert(st.log.some(function (l) { return /packed Sony Venice.*: In the case/.test(l.what); }));
+    assert(st.log.some(function (l) { return /packed Sony Venice/.test(l.what); }) && st.log.some(function (l) { return /note on Sony Venice.*: In the case/.test(l.what); }));
   });
   await check('phone: add my kit', async function () {
     await page.click('[data-tab=mine]');
@@ -379,7 +382,6 @@ async function uiTests() {
     await page.click('[data-tab=kit]');
     b.down = true;
     await page.click('[data-act=pack][data-id=i2]');
-    await page.click('.sure button[type=submit]');
     await page.waitForFunction(function () { return /No signal/.test(document.getElementById('status').textContent); });
     assert(!b.get({ a: 'state', k: 'ADMIN1' }).items[1].packed);
     b.down = false;
@@ -388,7 +390,27 @@ async function uiTests() {
     assert(b.get({ a: 'state', k: 'ADMIN1' }).items[1].packed);
     await page.screenshot({ path: __dirname + '/shots/phone-kit.png', fullPage: true });
   });
-
+  await check('phone: quick ticks on a slow line never flick back', async function () {
+    var ids = (await page.$$eval('[data-act=pack]', function (l) { return l.map(function (e) { return e.getAttribute('data-id'); }); })).slice(0, 2);
+    var was = function (id) { return !!b.get({ a: 'state', k: 'ADMIN1' }).items.filter(function (i) { return i.id === id; })[0].packed; };
+    var before = ids.map(was);
+    b.slow = 1200;
+    await page.click('[data-act=pack][data-id="' + ids[0] + '"]');
+    await page.click('[data-act=pack][data-id="' + ids[1] + '"]');
+    var seen = [];
+    for (var n = 0; n < 12; n++) {
+      seen.push(await page.$eval('[data-act=pack][data-id="' + ids[1] + '"]', function (e) { return e.classList.contains('on'); }));
+      await new Promise(function (r) { setTimeout(r, 250); });
+    }
+    b.slow = 0;
+    assert(seen.every(function (x) { return x === !before[1]; }), JSON.stringify(seen));
+    await new Promise(function (r) { setTimeout(r, 600); });
+    assert(ids.every(function (id, n) { return was(id) === !before[n]; }));
+    // put them back as they were for the checks after this
+    for (var id of ids) { await page.click('[data-act=pack][data-id="' + id + '"]'); await new Promise(function (r) { setTimeout(r, 300); }); }
+    await new Promise(function (r) { setTimeout(r, 600); });
+    assert(ids.every(function (id, n) { return was(id) === before[n]; }));
+  });
   var desk = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   var ep = await desk.newPage(); ep.on('pageerror', function (e) { errors.push(e.message); });
   await check('desktop: Elliot sees James online, kit in', async function () {
@@ -447,9 +469,8 @@ async function uiTests() {
     await ep.click('[data-tab=kit]');
     var id = b.get({ a: 'state', k: 'ADMIN1' }).items.filter(function (i) { return i.item === 'Vaxis TX + 3 RX'; })[0].id;
     await ep.click('[data-act=confirm][data-id="' + id + '"]');
-    assert(/Vaxis TX \+ 3 RX confirmed/.test(await ep.textContent('.sure')));
-    await ep.click('.sure button[type=submit]');
-    await ep.waitForFunction(function () { return !document.getElementById('status').classList.contains('show'); });
+    assert(/Confirmed · Vaxis TX \+ 3 RX/.test(await ep.textContent('#toast')));
+    await new Promise(function (r) { setTimeout(r, 600); });
     assert(b.get({ a: 'state', k: 'ADMIN1' }).items.filter(function (i) { return i.id === id; })[0].confirmed);
   });
   await check('desktop: link + WhatsApp invite per person', async function () {

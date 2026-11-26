@@ -194,10 +194,11 @@
   function refresh() {
     if (!API || !key || busy) return Promise.resolve();
     if (queue.length) return flush();
-    var asked = job;
+    var asked = job, seq = sendSeq;
     return get().then(function (d) {
       if (d && d.error && !S) { fatal(d.error); return; }
       if (asked !== job) return;   // switched job while this was loading
+      if (seq !== sendSeq) return; // something was tapped while this was loading: it's already out of date
       took(d);
       prefetch();
       if (typing()) paintStatus(); else render();
@@ -210,12 +211,16 @@
   var PIPE = { add: 1, set: 1, del: 1, batch: 1 };
   // Until the new script is deployed (state has no v), send the old-style action.
   function toPipe(op) { if (S && !S.v) return op; return PIPE[op.a] ? op : window.HymnRules.translate(op, S || {}); }
+  // fx[i] is the on-screen change for queue[i]. When the server answers with the
+  // whole sheet, changes still waiting to send are put back on top, so ticks never flick back.
+  var fx = queue.map(function () { return null; }), sendSeq = 0;
+  function reapply() { fx.forEach(function (f) { if (f) try { f(); } catch (e) {} }); }
   function send(op, optimistic) {
     if (ui.viewAs) { status = { text: 'You\'re seeing it as ' + first(ui.viewAs) + '. Tap Back to you to make changes.', bad: true }; paintStatus(); return Promise.resolve(); }
     op = toPipe(op);
     if (op && !op.error && job) op.job = job;
     if (!op || op.error) { status = op ? { text: op.error, bad: true } : { text: '', bad: false }; paintStatus(); render(); return Promise.resolve(); }
-    queue.push(op); save('hymn_queue_' + key, queue);
+    queue.push(op); save('hymn_queue_' + key, queue); fx.push(optimistic || null); sendSeq++;
     if (optimistic) { try { optimistic(); } catch (e) {} }
     render();
     return flush();
@@ -223,13 +228,14 @@
 
   function flush() {
     if (busy || !queue.length) return Promise.resolve();
-    busy = true; status = { text: 'Saving…', bad: false }; paintStatus();
+    busy = true;
     var out = toPipe(queue[0]);   // older phones may have queued un-translated changes
-    if (!out || out.error) { queue.shift(); save('hymn_queue_' + key, queue); busy = false; if (queue.length) return flush(); return refresh(); }
+    if (!out || out.error) { queue.shift(); fx.shift(); save('hymn_queue_' + key, queue); busy = false; if (queue.length) return flush(); return refresh(); }
     return post(out).then(function (d) {
-      queue.shift(); save('hymn_queue_' + key, queue);
+      queue.shift(); fx.shift(); save('hymn_queue_' + key, queue);
       busy = false;
       var ok = took(d);
+      if (ok) reapply();
       if (!ok) { var msg = status.text; get().then(function (x) { took(x); status = { text: msg, bad: true }; render(); }); }
       render();
       if (queue.length) return flush();
@@ -323,7 +329,7 @@
     else if (ui.tab === 'crew') h += crewView();
     else if (ui.tab === 'notes' || ui.tab === 'shots') h += notesView() + shotsView();
     else h += logView();
-    h += '</main><footer>Elliot Holbrow · DP · <button class="link grey" data-act="tour">How it works</button></footer></div>' + sureBar() + '<div id="status"></div>';
+    h += '</main><footer>Elliot Holbrow · DP · <button class="link grey" data-act="tour">How it works</button></footer></div>' + sureBar() + toastHtml() + '<div id="status"></div>';
     root.innerHTML = h;
 
     Object.keys(forms).forEach(function (k) { var el = root.querySelector('[data-keep="' + k + '"]'); if (el) el.value = forms[k]; });
@@ -1131,9 +1137,23 @@
     var word = p.a === 'task' ? (on ? 'reopened' : 'done') : p.a === 'pack' ? (on ? 'not packed' : 'packed') : (on ? 'not confirmed' : 'confirmed');
     return { on: on, name: name, word: word };
   }
+  // After a tick: a small iPhone-style toast with Undo and Add note, gone after a few seconds.
+  var toastTimer = null;
+  function toastHtml() {
+    var t = ui.toast; if (!t) return '';
+    return '<div id="toast" role="status"><span class="tt">✓ ' + esc(t.text) + '</span>' + (t.note ? '<button class="link" data-act="toastnote">Add note</button>' : '') + (t.undo ? '<button class="link" data-act="toastundo">Undo</button>' : '') + '</div>';
+  }
+  function showToast(t) {
+    ui.toast = t; clearTimeout(toastTimer);
+    var old = document.getElementById('toast'); if (old) old.remove();
+    root.insertAdjacentHTML('beforeend', toastHtml());
+    toastTimer = setTimeout(hideToast, 5000);
+  }
+  function hideToast() { ui.toast = null; clearTimeout(toastTimer); var el = document.getElementById('toast'); if (el) el.remove(); }
   function sureBar() {
     var p = ui.sure; if (!p) return '';
     var x = tickInfo(p); if (!x) return '';
+    if (p.noteOnly) return '<form class="sure" data-form="sure" role="dialog"><p>Add a note to <b>' + esc(x.name) + '</b></p><input name="note" id="sure_note" data-keep="sure_note" autocomplete="off" placeholder="e.g. left with Mark at the van"><div class="row"><button type="submit" class="yes">Add note</button><button type="button" class="link" data-act="sureno">Cancel</button></div></form>';
     var h = '<form class="sure" data-form="sure" role="dialog"><p><b>' + esc(x.name) + '</b> ' + esc(x.word) + '</p>';
     if (!x.on) h += '<input name="note" id="sure_note" data-keep="sure_note" autocomplete="off" placeholder="Add a note (optional)">';
     h += '<div class="row"><button type="submit" class="yes">' + (x.on ? 'Undo it' : 'Log it') + '</button><button type="button" class="link" data-act="sureno">Cancel</button></div>';
@@ -1211,8 +1231,13 @@
     if (a === 'crewopen') { var n = +t.getAttribute('data-n'); ui.crewOpen = ui.crewOpen === n ? null : n; render(); return; }
     if (a === 'copy') { copy(t.getAttribute('data-text')); t.textContent = 'Copied'; return; }
     if (a === 'pack' || a === 'confirm' || a === 'task') {
-      ui.sure = { a: a, id: id }; render(); return;
+      var ti0 = tickInfo({ a: a, id: id });
+      doTick(a, id);
+      if (ti0) showToast({ a: a, id: id, text: ti0.word.charAt(0).toUpperCase() + ti0.word.slice(1) + ' · ' + ti0.name, undo: true, note: !ti0.on });
+      return;
     }
+    if (a === 'toastundo') { var tu = ui.toast; hideToast(); if (tu) doTick(tu.a, tu.id); return; }
+    if (a === 'toastnote') { var tn0 = ui.toast; hideToast(); if (tn0) { ui.sure = { a: tn0.a, id: tn0.id, noteOnly: true }; render(); var ne = document.getElementById('sure_note'); if (ne) ne.focus(); } return; }
     if (a === 'sureno') { ui.sure = null; render(); return; }
 
     if (a === 'delitem') { send({ a: 'delete_item', id: id }, function () { S.items = S.items.filter(function (i) { return i.id !== id; }); ui.open = null; }); return; }
@@ -1249,6 +1274,11 @@
     if (kind === 'sure') {
       var sp = ui.sure; ui.sure = null;
       if (!sp) return render();
+      if (sp.noteOnly) {
+        if (!v.note) return render();
+        send({ a: 'add_note', kind: sp.a === 'task' ? 'task' : 'item', id: sp.id, note: v.note }, function () { var r = sp.a === 'task' ? S.tasks.filter(function (x) { return x.id === sp.id; })[0] : findItem(sp.id); if (r) r.notes = (r.notes ? r.notes + ' · ' : '') + v.note; });
+        return;
+      }
       var sx = tickInfo(sp);
       var done = sx ? sx.name + ' ' + sx.word : '';
       doTick(sp.a, sp.id, v.note).then(function () {

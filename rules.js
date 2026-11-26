@@ -82,6 +82,13 @@
       return { a: 'set', tab: 'items', id: ti.id, fields: tf, log: (ti[field] ? 'un' : '') + field + ' ' + ti.item + (tn ? ': ' + tn : '') };
     }
 
+    if (a === 'add_note') {
+      var nr = op.kind === 'task' ? find(S.tasks, op.id) : find(S.items, op.id), nt = clean(op.note, 300);
+      if (!nr || !nt) return null;
+      return { a: 'set', tab: op.kind === 'task' ? 'tasks' : 'items', id: nr.id, fields: { notes: (nr.notes ? nr.notes + ' · ' : '') + nt, updated: '@now' },
+        log: 'note on ' + (nr.task || nr.item) + ': ' + nt };
+    }
+
     if (a === 'delete_item') {
       var di = find(S.items, op.id);
       if (!di) return null;
