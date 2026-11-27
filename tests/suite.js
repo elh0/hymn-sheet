@@ -221,18 +221,16 @@ async function uiTests() {
     raw(b, 'ADMIN1', { a: 'add', tab: 'flags', row: { id: 'fj1', job: 'test', text: 'James: is the backpack on the quote?', status: 'open', raised_by: 'Inbox check' } });
     raw(b, 'ADMIN1', { a: 'add', tab: 'flags', row: { id: 'fm1', job: 'test', text: 'Milo to confirm the focus package', status: 'open', raised_by: 'Inbox check' } });
     await page.reload(); await page.waitForSelector('.todo');
-    assert(/Me/.test(await page.textContent('nav button.on >> visible=true')));
-    assert(!(await page.$('.hint')), 'Me page should have no hint line');
-    await page.click('[data-act=showdocs]');
+    assert(/Me/.test(await page.textContent('nav button.on')));
+    assert(/Your own page/.test(await page.textContent('.hint')));
     assert((await page.textContent('.docs a')).includes('Call sheet v7'));
-    await page.click('[data-act=showdocs]');
     var t = await page.textContent('.todo');
     assert(/Check Rialto is on the quote/.test(t) && /backpack on the quote/.test(t) && !/Milo to confirm/.test(t), t);
     assert(!/Send focus quote/.test(t), 'Milo\'s task showed for James');
   });
   await check('phone: first open shows How it works; Got it hides it & the footer brings it back', async function () {
     await page.evaluate(function () { localStorage.removeItem('hymn_tour1'); }); await page.reload(); await page.waitForSelector('.todo');
-    assert(/kit you're bringing/.test(await page.textContent('#tour')) && /give a task/i.test(await page.textContent('#tour')));
+    assert(/kit you're bringing/.test(await page.textContent('#tour')) && /Give a task/.test(await page.textContent('#tour')));
     await page.click('[data-act=tourdone]');
     assert(!(await page.$('#tour')));
     await page.reload(); await page.waitForSelector('.todo');
@@ -241,31 +239,12 @@ async function uiTests() {
     assert(await page.$('#tour'));
     await page.click('[data-act=tourdone]');
   });
-  await check('phone: my page is DP notes, to-dos, kit, then one-tap rows; the job is one line', async function () {
-    assert(await page.$('.hero a.doc-link'), 'no main doc');
-    assert(/To do · \d/.test(await page.textContent('#todo .ghdr')));
-    assert(await page.$('#mykit'));
-    assert(!(await page.$('#askform')) && !(await page.$('#giveTask')) && !(await page.$('#flagform')), 'forms should be behind +');
-    assert(!(await page.$('header .facts')));
-    await page.click('[data-act=details]');
-    assert(await page.$('header .facts'));
-    await page.click('[data-act=details]');
-    await page.click('[data-act=showdocs]');
+  await check('phone: the top of my page has the DP notes & jumps to each part', async function () {
+    assert(await page.$('.start .maindoc a.doc-link'), 'no main doc');
+    var chips = await page.$$eval('.start .chip', function (l) { return l.map(function (b) { return b.textContent; }); });
+    assert(chips.some(function (c) { return /To-dos/.test(c); }) && chips.some(function (c) { return /Your kit/.test(c); }) && chips.some(function (c) { return /All documents/.test(c); }), chips.join('|'));
+    await page.click('.start .chip[data-to=docs]');
     assert(await page.$('#docs'));
-    await page.click('[data-act=showdocs]');
-  });
-  await check('phone: the + button opens ask, task & flag; a flag saves & closes it', async function () {
-    await page.click('.fab');
-    assert(await page.$('.sheet [data-s=ask]') && await page.$('.sheet [data-s=task]') && await page.$('.sheet [data-s=flag]'));
-    await page.click('.sheet [data-s=flag]');
-    await page.fill('#flag_text', 'No spare batteries for the Ember');
-    await page.click('#flagform button[type=submit]');
-    assert(!(await page.$('.sheet')), 'sheet stayed open');
-    await new Promise(function (r) { setTimeout(r, 600); });
-    assert(b.get({ a: 'state', k: 'ADMIN1' }).flags.some(function (f) { return /spare batteries/.test(f.text); }));
-    var fid = b.get({ a: 'state', k: 'ADMIN1' }).flags.filter(function (f) { return /spare batteries/.test(f.text); })[0].id;
-    raw(b, 'ADMIN1', { a: 'set', tab: 'flags', id: fid, fields: { status: 'sorted' } });
-    await page.reload(); await page.waitForSelector('.todo');
   });
   await check('phone: camera flags go to camera crew, Steadicam flags to the Steadicam op', async function () {
     raw(b, 'ADMIN1', { a: 'add', tab: 'flags', row: { id: 'fc1', job: 'test', text: 'Does the zoom need a ZMU for wireless?', status: 'open', raised_by: 'Inbox check' } });
@@ -287,12 +266,11 @@ async function uiTests() {
     await page.reload(); await page.waitForSelector('.todo');
   });
   await check('phone: a plan section opens the plan at that section', async function () {
-    var g = await page.$('#plan [data-act=gosec]');
+    var g = await page.$('#plan .chip[data-act=gosec]');
     assert(g, 'no plan chips');
     await g.click();
-    assert(/More/.test(await page.textContent('nav button.on >> visible=true')));
+    assert(/Plan/.test(await page.textContent('nav button.on')));
     assert(await page.$('.contents .chip'));
-    await page.click('[data-tab=mine]');
   });
   await check('phone: job chat: send a message, others see it, @name turns into their task', async function () {
     await page.click('[data-tab=chat]');
@@ -303,12 +281,10 @@ async function uiTests() {
     assert(st.chat && st.chat.some(function (m) { return /spare LCS/.test(m.text) && m.who === 'James Burns'; }), JSON.stringify(st.chat));
     assert(!st.log.some(function (l) { return /spare LCS/.test(l.what); }), 'chat went on the log');
     await page.click('[data-act=chattask]');
-    assert(await page.$('.sheet #giveTask'), 'task sheet not open');
+    assert(/Me/.test(await page.textContent('nav button.on')));
     assert.strictEqual(await page.inputValue('#task_text'), 'can you bring the spare LCS?');
     assert.strictEqual(await page.$eval('[data-keep=task_who]', function (e) { return e.value; }), 'Milo Brown');
     await page.fill('#task_text', '');
-    await page.click('.sheet .cancel');
-    await page.click('[data-tab=mine]');
     raw(b, 'MILO1', { a: 'add', tab: 'chat', row: { who: '@me', text: 'yep on it', time: '@now' } });
     await page.reload(); await page.waitForSelector('nav');
     assert(/Chat\s*\(1\)/.test(await page.textContent('[data-tab=chat]')), await page.textContent('[data-tab=chat]'));
@@ -339,14 +315,8 @@ async function uiTests() {
     await page.click('[data-tab=mine]');
   });
   await check('phone: tabs are named for what they hold', async function () {
-    var names = await page.$$eval('nav button', function (l) { return l.filter(function (b) { return b.offsetParent; }).map(function (b) { return b.textContent.replace(/\s*\(.*$/, '').trim(); }); });
-    assert.deepStrictEqual(names, ['Me', 'Kit', 'Chat', 'More']);
-    await page.click('[data-tab=more]');
-    var rows = await page.textContent('.more-list');
-    assert(/Plan/.test(rows) && /Crew/.test(rows) && /Changes/.test(rows), rows);
-    await page.click('.more-list [data-tab=log]');
-    assert(/More/.test(await page.textContent('nav button.on >> visible=true')));
-    await page.click('[data-tab=mine]');
+    var names = await page.$$eval('nav button', function (l) { return l.map(function (b) { return b.textContent.replace(/\s*\(.*$/, '').trim(); }); });
+    assert.deepStrictEqual(names, ['Me', 'Kit', 'Plan', 'Chat', 'Crew', 'Changes']);
   });
   await check('phone: flags show no-supplier and unconfirmed', async function () {
     await page.click('[data-tab=kit]');
@@ -404,7 +374,6 @@ async function uiTests() {
     assert(b.get({ a: 'state', k: 'ADMIN1' }).asks.some(function (q) { return q.about === 'NDs' && q.to === 'Elliot' && q.from === 'James Burns'; }));
   });
   await check('phone: "I\'ve added all my kit"', async function () {
-    await page.click('[data-tab=mine]');
     await page.click('[data-act=kitdone]');
     await page.waitForFunction(function () { return /all on the sheet/.test(document.body.textContent); });
     await page.screenshot({ path: __dirname + '/shots/phone-mine.png', fullPage: true });
@@ -450,10 +419,6 @@ async function uiTests() {
     await ep.click('[data-tab=crew]');
     var t = await ep.textContent('.crew');
     assert(/James Burns2nd AC · online now/.test(t) && /kit in/.test(t), t);
-  });
-  await check('desktop: all six tabs show on a wide screen', async function () {
-    var wide = await ep.$$eval('nav button', function (l) { return l.filter(function (b) { return b.offsetParent; }).map(function (b) { return b.textContent.replace(/\s*\(.*$/, '').trim(); }); });
-    assert.deepStrictEqual(wide, ['Me', 'Kit', 'Plan', 'Chat', 'Crew', 'Changes']);
   });
   await check('desktop: Elliot\'s Mine tab has To send, with copy, WhatsApp & Sent', async function () {
     raw(b, 'ADMIN1', { a: 'add', tab: 'dp_send', row: { to: 'Milo', via: 'WhatsApp', about: 'Rialto', text: 'hey milo\n\nall good' } });
@@ -526,7 +491,7 @@ async function uiTests() {
     assert(await ep.$('.crew .contact'), 'panel closed on click');
   });
   await check('phone: email is a mailto', async function () {
-    await page.click('[data-tab=more]'); await page.click('.more-list [data-tab=crew]'); await page.click('.crew [data-n="1"]');
+    await page.click('[data-tab=crew]'); await page.click('.crew [data-n="1"]');
     assert(/^mailto:m@x\.com/.test(await page.getAttribute('.crew .contact a[href^="mailto:"]', 'href')));
     await page.click('[data-tab=kit]');
   });
@@ -543,7 +508,7 @@ async function uiTests() {
     await page.click('[data-act=openitem][data-id=i1]');
   });
   await check('phone: Notes tab shows the DP notes', async function () {
-    await page.click('[data-tab=more]'); await page.click('.more-list [data-tab=notes]');
+    await page.click('[data-tab=notes]');
     var t = await page.textContent('main');
     assert(/Camera & codecs/.test(t) && /Venice 8.6K full res/.test(t) && /Rickshaw in low/.test(t), t.slice(0, 200));
     var doc = await page.evaluate(function () { var a = [].filter.call(document.querySelectorAll('main a'), function (x) { return /drive\.google/.test(x.href); })[0]; return a && [a.textContent, a.href]; });
@@ -566,9 +531,8 @@ async function uiTests() {
     assert(/X-OCN/.test(b.get({ a: 'state', k: 'JAMES1' }).job.dp_notes));
   });
   await check('phone: sees Elliot\'s confirm within a poll', async function () {
-    await page.click('[data-tab=kit]');
     await page.evaluate(function () { document.dispatchEvent(new Event('visibilitychange')); });
-    await page.waitForFunction(function () { return /2 confirmed/.test(document.querySelector('.count').textContent); }, null, { timeout: 12000 });
+    await page.waitForFunction(function () { return /confirmed 2/.test(document.querySelector('.count').textContent); }, null, { timeout: 12000 });
   });
   await check('phone: "Since you last looked" lists other people\'s changes', async function () {
     await page.evaluate(function () { localStorage.setItem('hymn_seen_JAMES1', String(Date.now() - 3 * 3600e3)); });

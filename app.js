@@ -123,25 +123,6 @@
     }
     return h + '</section>';
   }
-  function sheetHtml() {
-    var k = ui.sheet; if (!k) return '';
-    var h = '<div class="scrim" data-act="sheetclose"></div><div class="sheet" role="dialog">';
-    if (k === 'menu') {
-      var m = [['ask', '?', 'blue', 'Ask someone', 'It shows on their page until they answer'], ['task', '✓', 'green', 'Give someone a task', 'It lands on their to-dos'], ['flag', '!', 'red', 'Something\'s wrong', 'Everyone it touches sees it']];
-      if (!S.me.admin) m.push(['kit', '+', 'orange', 'Add kit', 'Something you\'re bringing']);
-      h += '<div class="group">' + m.map(function (x) {
-        return '<button class="cell rowbtn" data-act="sheet" data-s="' + x[0] + '"><span class="sico ' + x[2] + '">' + x[1] + '</span><span class="body"><span class="ttl">' + x[3] + '</span><span class="sub">' + x[4] + '</span></span></button>';
-      }).join('') + '</div>';
-    } else if (k === 'ask') h += askForm();
-    else if (k === 'task') h += taskForm();
-    else if (k === 'flag') h += '<section id="flagform"><h2>Something wrong?</h2><form class="box" data-form="flag"><label>Problem<input name="text" id="flag_text" data-keep="flag_text" placeholder="e.g. no batteries for the Ember"></label><div class="row"><button type="submit">Flag it</button></div></form></section>';
-    return h + '<button class="cancel" data-act="sheetclose">Cancel</button></div>';
-  }
-  function openSheet(k) {
-    if (k === 'kit') { ui.sheet = null; ui.adding = true; ui.tab = 'mine'; store('hymn_tab2', 'mine'); render(); var mk = document.getElementById('mykit'); if (mk) mk.scrollIntoView(); var ai = document.getElementById('add_item'); if (ai) ai.focus(); return; }
-    ui.sheet = k; render();
-    var fi = document.querySelector('.sheet input[type=text], .sheet input:not([type])'); if (fi && k !== 'menu') fi.focus();
-  }
   function askForm() {
     var h = '<section id="askform"><h2>Ask someone</h2><form class="box" data-form="ask">';
     h += '<label>Who<select name="to" data-keep="ask_to">' + askOptions() + '</select></label>';
@@ -340,16 +321,15 @@
     var h = '<div class="wrap">' + (ui.viewAs ? '<div class="viewas">Seeing it as <b>' + esc(ui.viewAs) + '</b> · nothing saves <button data-act="viewas" data-name="">Back to you</button></div>' : '') + header() + tabs() + '<main>';
     if (S.loading) h += '<p class="grey gap">Loading…</p>';
     else h += hint();
-    if (!S.loading && ui.tab !== 'log' && ui.tab !== 'chat' && ui.tab !== 'more') h += asksBlock() + sinceBlock();
+    if (!S.loading && ui.tab !== 'log' && ui.tab !== 'chat') h += asksBlock() + sinceBlock();
     if (S.loading) {}
     else if (ui.tab === 'kit') h += kitView();
     else if (ui.tab === 'mine') h += mineView();
     else if (ui.tab === 'chat') h += chatView();
     else if (ui.tab === 'crew') h += crewView();
-    else if (ui.tab === 'more') h += moreView();
     else if (ui.tab === 'notes' || ui.tab === 'shots') h += notesView() + shotsView();
     else h += logView();
-    h += '</main><footer>Elliot Holbrow · DP · <button class="link grey" data-act="tour">How it works</button></footer></div>' + (ui.tab !== 'chat' && !S.loading ? '<button class="fab" data-act="sheet" data-s="menu" aria-label="Add">+</button>' : '') + sheetHtml() + sureBar() + toastHtml() + '<div id="status"></div>';
+    h += '</main><footer>Elliot Holbrow · DP · <button class="link grey" data-act="tour">How it works</button></footer></div>' + sureBar() + toastHtml() + '<div id="status"></div>';
     root.innerHTML = h;
 
     Object.keys(forms).forEach(function (k) { var el = root.querySelector('[data-keep="' + k + '"]'); if (el) el.value = forms[k]; });
@@ -385,9 +365,6 @@
       }).join('') + '</div>';
     }
     h += '<h1>' + esc(j.title || j.job) + '</h1>';
-    var line = [j.dates, j.call && 'Call ' + String(j.call).replace(/^[^0-9]*?(\d{1,2}[:.]\d{2}).*$/, '$1'), j.location && String(j.location).split(/[(,]/)[0].trim()].filter(Boolean);
-    h += '<p class="jobline">' + esc(line.join(' · ')) + ' <button class="link" data-act="details">' + (ui.details ? 'Less' : 'Details') + '</button></p>';
-    if (!ui.details) return h + '</header>';
     h += '<dl class="facts">';
     if (j.dates) h += '<dt>Shoot</dt><dd>' + esc(j.dates) + '</dd>';
     if (j.call) h += '<dt>Call</dt><dd>' + esc(j.call) + '</dd>';
@@ -396,6 +373,7 @@
     if (j.notes) h += '<dt>Note</dt><dd>' + esc(j.notes) + '</dd>';
     if (j.deck) h += '<dt>Deck</dt><dd><a href="' + esc(j.deck) + '" target="_blank" rel="noopener">DP notes</a></dd>';
     h += '</dl>';
+    h += '<p class="count">Kit ' + items.length + ' · confirmed ' + conf + ' · packed ' + packed + '</p>';
     if (S.me.admin) {
       h += '<p><button class="link" data-act="editjob">' + (ui.editJob ? 'Close' : 'Edit job') + '</button></p>';
       if (ui.editJob) {
@@ -412,26 +390,14 @@
 
   function tabs() {
     var flags = openFlags().length;
-    var t = [['mine', 'Me'], ['kit', 'Kit'], ['notes', 'Plan', 'wide'], ['chat', 'Chat'], ['crew', 'Crew', 'wide'], ['log', 'Changes', 'wide'], ['more', 'More', 'narrow']];
-    var inMore = /^(notes|shots|crew|log|more)$/.test(ui.tab);
+    var t = [['mine', 'Me'], ['kit', 'Kit'], ['notes', 'Plan'], ['chat', 'Chat'], ['crew', 'Crew'], ['log', 'Changes']];
     return '<nav>' + t.map(function (x) {
       var extra = '';
       if (x[0] === 'mine') { var open = myTasks().filter(function (k) { return !k.done; }).length + myFlags().length + toSend().length + myChainSteps().length; if (open) extra = ' (' + open + ')'; }
       if (x[0] === 'chat' && ui.tab !== 'chat') { var un = chatUnread(); if (un) extra = ' <span class="blue">(' + un + ')</span>'; }
       if (x[0] === 'kit' && flags) extra = ' <span class="red">(' + flags + ')</span>';
-      if (x[0] === 'more') { var fr = fresh().length; if (fr && ui.tab !== 'log') extra = ' <span class="blue">(' + fr + ')</span>'; }
-      var on = ui.tab === x[0] || (x[0] === 'notes' && ui.tab === 'shots') || (x[0] === 'more' && inMore);
-      return '<button class="' + (on ? 'on' : '') + (x[2] ? ' ' + x[2] : '') + '" data-tab="' + x[0] + '">' + x[1] + extra + '</button>';
+      return '<button class="' + (ui.tab === x[0] || (x[0] === 'notes' && ui.tab === 'shots') ? 'on' : '') + '" data-tab="' + x[0] + '">' + x[1] + extra + '</button>';
     }).join('') + '</nav>';
-  }
-
-  function moreView() {
-    var fr = fresh().length;
-    var rows = [['notes', 'Plan', 'DP notes, schedule, camera, light & look'], ['crew', 'Crew', 'Who\'s on the job & how to reach them'], ['log', 'Changes', fr ? fr + ' new since you last looked' : 'Everything that moved, with who did it']];
-    var h = '<section class="more-list"><div class="group">' + rows.map(function (r) {
-      return '<button class="cell rowbtn" data-tab="' + r[0] + '"><span class="body"><span class="ttl">' + r[1] + '</span><span class="sub">' + esc(r[2]) + '</span></span><span class="chev">›</span></button>';
-    }).join('') + '</div></section>';
-    return h;
   }
 
   function flagsBlock() {
@@ -463,8 +429,7 @@
   }
 
   function kitView() {
-    var all = S.items, conf = all.filter(function (i) { return i.confirmed; }).length, packed = all.filter(function (i) { return i.packed; }).length;
-    var h = '<p class="count grey small">' + all.length + ' items · ' + conf + ' confirmed · ' + packed + ' packed</p>' + chainBlock() + flagsBlock();
+    var h = chainBlock() + flagsBlock();
     var filters = [['all', 'All'], ['unconfirmed', 'Not confirmed'], ['unpacked', 'Not packed'], ['nosupplier', 'No supplier']];
     h += '<div class="filters">' + filters.map(function (f) {
       return '<button class="' + (ui.filter === f[0] ? 'on' : '') + '" data-act="filter" data-f="' + f[0] + '">' + f[1] + '</button>';
@@ -608,6 +573,7 @@
 
   // One line under the tabs so crew know what each one is for.
   var HINTS = {
+    mine: 'Your own page: the DP notes, what you need to do, your part of the plan & your kit. Tap a button to jump to it.',
     kit: 'Every bit of kit for the shoot, by department. Tap an item to see who brings it & tick it when it\'s packed.',
     notes: 'The plan from Elliot: documents, schedule, camera, light & look. Tap a heading below to jump to it.',
     shots: 'The plan from Elliot: documents, schedule, camera, light & look. Tap a heading below to jump to it.',
@@ -819,16 +785,17 @@
   function tourSeen() { return !!store('hymn_tour1'); }
   function tourBlock() {
     if (tourSeen() && !ui.tour) return '';
-    var first3 = S.me.admin ? [['the <b>DP notes</b> at the top', 'hero'], ['your <b>to-dos</b> as you go', 'todo'], ['the <b>kit lists</b> on Kit', '@kit']]
-      : [['the <b>DP notes</b> at the top', 'hero'], ['your <b>to-dos</b> as you go', 'todo'], ['the <b>kit</b> you\'re bringing', 'mykit']];
+    var first3 = S.me.admin ? [['the <b>DP notes</b> at the top', 'docs'], ['your <b>to-dos</b> as you go', 'todo'], ['the <b>kit lists</b> on Kit', '@kit']]
+      : [['the <b>DP notes</b> at the top', 'docs'], ['your <b>to-dos</b> as you go', 'todo'], ['the <b>kit</b> you\'re bringing', 'mykit']];
     var verbs = ['Open', 'Tick off', S.me.admin ? 'Check' : 'Add'];
     function go(t) { return t.charAt(0) === '@' ? 'data-act="tab" data-t="' + t.slice(1) + '"' : 'data-act="jump" data-to="' + t + '"'; }
     var h = '<section class="callout" id="tour"><div class="ico">👋</div><div class="cbody"><div class="ct">' + (S.me.admin ? 'How it works' : 'New here? Three things to do') + '</div><ol>';
     first3.forEach(function (x, n) { h += '<li><button class="plain" ' + go(x[1]) + '>' + verbs[n] + ' ' + x[0] + '</button></li>'; });
-    h += '</ol><details class="more"><summary><b>More:</b> the + button, chat, Changes</summary><ul>';
+    h += '</ol><details class="more"><summary><b>More:</b> chat, asking someone, giving a task, Changes</summary><ul>';
     h += '<li><button class="plain" data-act="tab" data-t="chat"><b>Chat</b>: one chat for the whole job. Type @ & a name.</button></li>';
-    h += '<li><button class="plain" data-act="sheet" data-s="menu"><b>The + button</b>: ask someone, give a task, or flag something wrong.</button></li>';
-    h += '<li><button class="plain" data-act="tab" data-t="log"><b>Changes</b> (under More): everything that moved, with who did it.</button></li>';
+    h += '<li><button class="plain" data-act="jump" data-to="askform"><b>Ask someone</b>: it shows on their page until they answer.</button></li>';
+    h += '<li><button class="plain" data-act="jump" data-to="giveTask"><b>Give a task</b>: it lands on their page.</button></li>';
+    h += '<li><button class="plain" data-act="tab" data-t="log"><b>Changes</b>: everything that moved, with who did it.</button></li>';
     h += '</ul></details><button class="gotit" data-act="tourdone">Got it</button></div></section>';
     return h;
   }
@@ -842,65 +809,66 @@
   function jump(to, label, n) { return '<button class="chip" data-act="jump" data-to="' + esc(to) + '">' + esc(label) + (n != null ? ' <span class="grey">' + n + '</span>' : '') + '</button>'; }
   function secId(title) { return 'sec-' + String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 
-  function rowBtn(attrs, title, sub, open) {
-    return '<button class="cell rowbtn" ' + attrs + '><span class="body"><span class="ttl">' + title + '</span>' + (sub ? '<span class="sub">' + sub + '</span>' : '') + '</span><span class="chev">' + (open ? '⌃' : '›') + '</span></button>';
-  }
   function mineView() {
     var h = tourBlock() + toSendBlock();
     var meRow = S.crew.filter(function (c) { return same(c.name, S.me.name); })[0] || {};
     var mt = myTasks(), todo = mt.filter(function (t) { return !t.done; }), done = mt.filter(function (t) { return t.done; }), mf = myFlags(), tf = thinkFlags(), mc = myChainSteps();
     var reads = S.me.admin ? [] : sectionsFor(meRow).map(function (x) { return x.title; });
     var mi = S.me.admin ? [] : myItems(), docs = docLines();
+    if (!S.me.admin) h += '<p class="hello">Hi ' + esc(first(S.me.name)) + '. Open the DP notes, then work down your list.</p>';
 
-    // Start here: the DP notes deck, big.
+    // Start here: the DP notes deck, then a jump to each part of this page.
     var md = mainDoc();
-    if (md) h += '<section class="hero" id="hero"><span class="hico">▶</span><div class="hbody">' + linkify(md) + '</div></section>';
+    h += '<section class="start">';
+    if (md) h += '<div class="maindoc">' + linkify(md) + '</div>';
+    h += '<div class="chips">' + jump('todo', 'To-dos', todo.length + mf.length + mc.length);
+    if (tf.length) h += jump('think', 'To think about', tf.length);
+    if (reads.length) h += jump('plan', 'Your plan', reads.length);
+    if (!S.me.admin) h += jump('mykit', 'Your kit', mi.length);
+    if (docs.length) h += jump('docs', 'All documents', docs.length);
+    if (tourSeen() && !ui.tour) h += '<button class="chip" data-act="tour">How it works</button>';
+    h += '</div></section>';
 
-    var n = todo.length + mf.length + mc.length;
-    h += '<section class="todo" id="todo"><div class="ghdr">To do · ' + n + '</div>';
-    if (!n) h += '<p class="grey empty">Nothing for you right now.</p>';
-    else h += '<ul class="items">' + mc.map(chainTodoRow).join('') + todo.map(function (t) { return taskRow(t, true); }).join('') + mf.map(flagRow).join('') + '</ul>';
-    if (done.length) {
-      h += '<p class="gmore"><button class="link" data-act="showdone">' + (ui.showDone ? 'Hide done' : done.length + ' done ›') + '</button></p>';
-      if (ui.showDone) h += '<ul class="items done">' + done.map(function (t) { return taskRow(t, true); }).join('') + '</ul>';
-    }
-    h += '</section>';
-    if (tf.length) h += '<section id="think"><div class="ghdr">To think about · ' + tf.length + '</div><ul class="items">' + tf.map(flagRow).join('') + '</ul><p class="gfoot">Not yours to sort, but they touch your job.</p></section>';
+    h += '<section class="todo" id="todo"><h2>Your to-dos <span class="grey">(' + (todo.length + mf.length + mc.length) + ')</span></h2>';
+    if (!todo.length && !mf.length && !mc.length) h += '<p class="grey">Nothing for you right now.</p>';
+    h += '<ul class="items">' + mc.map(chainTodoRow).join('') + todo.map(taskRow).join('') + mf.map(flagRow).join('') + '</ul></section>';
+    if (tf.length) h += '<section id="think"><h2>To think about <span class="grey">(' + tf.length + ')</span></h2><p class="grey small">Not yours to sort, but they touch your job.</p><ul class="items">' + tf.map(flagRow).join('') + '</ul></section>';
+
+    if (reads.length) h += '<section id="plan"><h2>Your plan</h2><p class="grey small">The parts of the plan for you. Tap one to go straight to it.</p><div class="chips">' + reads.map(function (r) { return '<button class="chip" data-act="gosec" data-to="' + esc(secId(r)) + '">' + esc(r) + ' →</button>'; }).join('') + '</div></section>';
+    if (docs.length) h += docsBlock();
 
     if (!S.me.admin) {
-      h += '<section id="mykit"><div class="ghdr">Your kit · ' + mi.length + '</div>';
-      h += mi.length ? '<ul class="items">' + mi.map(itemRow).join('') + '</ul>' : '<p class="grey empty">Nothing yet. Add what you\'re bringing.</p>';
+      h += '<section id="mykit"><h2>Your kit <span class="grey">(' + mi.length + ')</span></h2><p class="grey small">Kit you bring or asked for. Tick it when it\'s packed.</p>';
+      h += '<ul class="items">' + mi.map(itemRow).join('') + '</ul>';
       h += addItemBlock();
       h += '<p class="gap"><button class="wide' + (meRow.kit_done ? ' on' : '') + '" data-act="kitdone">' + (meRow.kit_done ? 'My kit is all on the sheet · ' + esc(meRow.kit_done) : 'I\'ve added all my kit') + '</button></p>';
       h += '<p><a class="btn wide-btn update" target="_blank" rel="noopener" href="' + esc(myUpdate()) + '">Send my update</a></p></section>';
     }
+    if (done.length) h += '<section><h2>Done <span class="grey">(' + done.length + ')</span></h2><ul class="items">' + done.map(taskRow).join('') + '</ul></section>';
+    h += askForm() + asksList();
+    h += taskAdder();
 
-    // Everything else is one tap away.
-    h += '<section class="morefor"><div class="ghdr">' + (S.me.admin ? 'More' : 'More for you') + '</div><div class="group">';
-    if (reads.length) h += '<div id="plan">' + reads.map(function (r) { return rowBtn('data-act="gosec" data-to="' + esc(secId(r)) + '"', esc(r), 'Your part of the plan'); }).join('') + '</div>';
-    if (docs.length) h += rowBtn('data-act="showdocs"', 'All documents', docs.length + ' files: schedules, previs, call sheet', ui.showDocs);
-    if (ui.showDocs) h += docsBlock();
-    h += rowBtn('data-act="alltasks"', 'Everyone\'s tasks', S.tasks.filter(function (t) { return !t.done; }).length + ' open', ui.allTasks);
-    if (ui.allTasks) h += '<ul class="items alltasks">' + S.tasks.map(taskRow).join('') + '</ul>';
-    h += '</div></section>';
-    h += asksList();
+    h += '<section id="flagform"><h2>Something wrong?</h2><form class="box" data-form="flag">';
+    h += '<label>Problem<input name="text" id="flag_text" data-keep="flag_text" placeholder="e.g. no batteries for the Ember"></label>';
+    h += '<div class="row"><button type="submit">Flag it</button></div></form></section>';
     return h;
   }
 
-  function taskRow(t, noDel) {
+  function taskRow(t) {
     var h = '<li class="item' + (t.done ? ' packed' : '') + '">';
     h += '<button class="box' + (t.done ? ' on' : '') + '" data-act="task" data-id="' + esc(t.id) + '">' + (t.done ? '×' : '') + '</button>';
     h += '<div class="body"><div class="name">' + esc(t.task) + '</div><div class="meta">' + esc(t.who) + (t.due ? ' · by ' + esc(t.due) : '') + (t.done ? ' · done ' + esc(t.done.split(' · ')[1] || '') : '') + '</div>' + (t.notes ? '<div class="meta">' + esc(t.notes) + '</div>' : '') + '</div>';
-    if (S.me.admin && noDel !== true) h += '<button class="tick" data-act="deltask" data-id="' + esc(t.id) + '">×</button>';
+    if (S.me.admin) h += '<button class="tick" data-act="deltask" data-id="' + esc(t.id) + '">×</button>';
     return h + '</li>';
   }
 
-  function taskForm() {
+  function taskAdder() {
     var h = '<section id="giveTask"><h2>Give someone a task</h2><form class="box" data-form="task">';
     h += '<label>Who<select name="who" data-keep="task_who"><option>Everyone</option>' + crewOptions('') + '</select></label>';
     h += '<label>Task<input name="task" id="task_text" data-keep="task_text" placeholder="e.g. Check Rialto is on the MCX quote"></label>';
     h += '<label>By<input name="due" id="task_due" data-keep="task_due" placeholder="e.g. Wed 12:00"></label>';
     h += '<div class="row"><button type="submit">Add task</button></div></form></section>';
+    h += '<section><h2>All tasks</h2><ul class="items">' + S.tasks.map(taskRow).join('') + '</ul></section>';
     return h;
   }
 
@@ -1218,7 +1186,7 @@
     }
     if (a === 'givelink') { send({ a: 'give_link', key: t.getAttribute('data-key') }); return; }
     if (a === 'seenanswers') { save('hymn_asks_' + key, askSeen().concat(newAnswers().map(function (q) { return q.id; })).slice(-200)); render(); return; }
-    if (a === 'askitem') { var ai = findItem(id); ui.askAbout = ai ? ai.item : ''; ui.askTo = ai && ai.owner && !same(ai.owner, S.me.name) ? ai.owner : 'Elliot'; ui.open = null; ui.sheet = 'ask'; render(); var at = document.getElementById('ask_text'); if (at) at.focus(); return; }
+    if (a === 'askitem') { var ai = findItem(id); ui.askAbout = ai ? ai.item : ''; ui.askTo = ai && ai.owner && !same(ai.owner, S.me.name) ? ai.owner : 'Elliot'; ui.open = null; ui.tab = 'mine'; store('hymn_tab2', 'mine'); render(); var af = document.getElementById('askform'); if (af) af.scrollIntoView(); var at = document.getElementById('ask_text'); if (at) at.focus(); return; }
     if (a === 'askclear') { ui.askAbout = ''; render(); return; }
     if (a === 'delask') { send({ a: 'delete_ask', id: id }, function () { S.asks = asks().filter(function (q) { return q.id !== id; }); }); return; }
     if (a === 'booknow') { var br = t.getAttribute('data-role'); ui.booking = br && ui.booking !== br ? br : null; render(); var bn = document.getElementById('book_name'); if (bn) bn.focus(); return; }
@@ -1245,19 +1213,14 @@
       var cmsg = chat().filter(function (m) { return m.id === id; })[0];
       if (!cmsg) return;
       var who = mentionOf(cmsg.text) || (same(cmsg.who, S.me.name) ? '' : cmsg.who);
-      ui.sheet = 'task'; render();
+      ui.tab = 'mine'; store('hymn_tab2', 'mine'); render();
       var tt = document.getElementById('task_text'), tw = root.querySelector('[data-keep="task_who"]');
       if (tt) tt.value = cmsg.text.replace(/(^|\s)@[A-Za-z][\w-]*/g, '$1').trim();
       if (tw && who) Array.prototype.forEach.call(tw.options, function (o) { if (same(o.value || o.text, who)) tw.value = o.value || o.text; });
+      var gt = document.getElementById('giveTask'); if (gt) gt.scrollIntoView();
       if (tt) tt.focus();
       return;
     }
-    if (a === 'sheet') { openSheet(t.getAttribute('data-s')); return; }
-    if (a === 'sheetclose') { ui.sheet = null; ui.askAbout = ''; ui.askTo = ''; render(); return; }
-    if (a === 'details') { ui.details = !ui.details; render(); return; }
-    if (a === 'showdone') { ui.showDone = !ui.showDone; render(); return; }
-    if (a === 'showdocs') { ui.showDocs = !ui.showDocs; render(); return; }
-    if (a === 'alltasks') { ui.allTasks = !ui.allTasks; render(); return; }
     if (a === 'tourdone') { store('hymn_tour1', '1'); ui.tour = false; render(); window.scrollTo(0, 0); return; }
     if (a === 'tour') { ui.tour = true; ui.tab = 'mine'; store('hymn_tab2', 'mine'); render(); window.scrollTo(0, 0); var te = document.getElementById('tour'); if (te) te.scrollIntoView(); return; }
     if (a === 'jump') { var je = document.getElementById(t.getAttribute('data-to')); if (je) je.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
@@ -1336,11 +1299,11 @@
       send({ a: 'set_item', id: id, fields: v }, function () { var i = findItem(id); Object.keys(v).forEach(function (k) { i[k] = v[k]; }); });
     } else if (kind === 'flag') {
       if (!v.text) return;
-      clear(); ui.sheet = null; showToast({ text: 'Flagged' });
+      clear();
       send({ a: 'raise_flag', text: v.text }, function () { S.flags.push({ id: 'tmp', text: v.text, status: 'open', raised_by: S.me.name, time: 'now' }); });
     } else if (kind === 'task') {
       if (!v.task) return;
-      clear(); ui.sheet = null; showToast({ text: 'Task for ' + first(v.who || 'Everyone') });
+      clear();
       send({ a: 'add_task', who: v.who, task: v.task, due: v.due }, function () { S.tasks.push({ id: 'tmp' + Date.now(), who: v.who, task: v.task, due: v.due, done: '' }); });
     } else if (kind === 'chain') {
       ui.addChain = false;
@@ -1353,7 +1316,7 @@
     } else if (kind === 'ask') {
       if (!v.text) return;
       var about = ui.askAbout || '';
-      clear(); ui.askAbout = ''; ui.askTo = ''; ui.sheet = null; showToast({ text: 'Asked ' + first(v.to) });
+      clear(); ui.askAbout = ''; ui.askTo = '';
       send({ a: 'ask', to: v.to, text: v.text, about: about }, function () { S.asks = asks().concat([{ id: 'tmp' + Date.now(), to: v.to, from: S.me.name, about: about, text: v.text, answer: '', asked: 'now' }]); });
     } else if (kind === 'answer') {
       var qid = f.getAttribute('data-id');
