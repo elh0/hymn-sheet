@@ -749,8 +749,17 @@
     return all.filter(function (m, n) { return n >= seen && !same(m.who, S.me.name); }).length;
   }
   function markChatSeen() { store(chatSeenKey(), String(((S && S.chat) || []).length)); }
+  // How to @ someone: first name, or first name + surname initial when two people share it (@JackW).
+  function people() { return S.crew.filter(function (c) { return c.name; }).concat(S.crew.some(function (c) { return same(c.name, 'Elliot') || /^elliot\b/i.test(c.name); }) ? [] : [{ name: 'Elliot', role: 'DP' }]); }
+  function atTag(c) {
+    var f = first(c.name), parts = String(c.name).trim().split(/\s+/);
+    var shared = people().filter(function (x) { return same(first(x.name), f); }).length > 1;
+    return f.replace(/[^\w-]/g, '') + (shared && parts.length > 1 ? parts[parts.length - 1].charAt(0).toUpperCase() : '');
+  }
   function mentionOf(t) {
     var hit = '';
+    people().some(function (c) { var tg = atTag(c); if (tg !== first(c.name) && new RegExp('@' + tg + '\\b', 'i').test(t)) { hit = c.name; return true; } });
+    if (hit) return hit;
     S.crew.concat([{ name: 'Elliot' }]).some(function (c) { var f = first(c.name); if (f.length > 1 && new RegExp('@' + f + '\\b', 'i').test(t)) { hit = c.name === 'Elliot' ? 'Elliot' : c.name; return true; } });
     return hit;
   }
@@ -771,7 +780,7 @@
       h += '</div></li>';
       last = m.who;
     });
-    h += '</ul><form class="say" data-form="say"><input name="text" id="say_text" data-keep="say_text" autocomplete="off" placeholder="Message everyone on the job"><button type="submit">Send</button></form></section>';
+    h += '</ul><form class="say" data-form="say"><div id="mentions" class="mentions" hidden></div><input name="text" id="say_text" data-keep="say_text" autocomplete="off" placeholder="Message everyone · type @ to tag someone"><button type="submit">Send</button></form></section>';
     return h;
   }
 
@@ -1245,6 +1254,43 @@
     if (a === 'kitdone') { send({ a: 'kit_done' }, function () { var c = S.crew.filter(function (x) { return same(x.name, S.me.name); })[0]; if (c) c.kit_done = c.kit_done ? '' : 'now'; }); return; }
     if (a === 'msgsent') { send({ a: 'set', tab: 'dp_send', id: id, fields: { sent: '@stamp' } }, function () { var m = (S.dp_send || []).filter(function (x) { return x.id === id; })[0]; if (m) m.sent = stamp(); }); return; }
     if (a === 'flag') { send({ a: 'resolve_flag', id: id }, function () { var f = S.flags.filter(function (x) { return x.id === id; })[0]; if (f) f.status = 'sorted'; }); return; }
+  });
+
+  // Chat: typing @ shows a list of names to pick from, so you know who you're tagging.
+  function atToken(el) { var m = el.value.slice(0, el.selectionStart).match(/(^|\s)@([\w-]*)$/); return m ? m[2] : null; }
+  function showMentions(el) {
+    var box = document.getElementById('mentions'); if (!box) return;
+    var q = atToken(el);
+    if (q === null) { box.hidden = true; box.innerHTML = ''; return; }
+    var ql = q.toLowerCase();
+    var list = people().filter(function (c) { return !same(c.name, S.me.name); }).filter(function (c) {
+      return !ql || String(c.name).toLowerCase().split(/\s+/).some(function (w) { return w.indexOf(ql) === 0; }) || atTag(c).toLowerCase().indexOf(ql) === 0;
+    }).slice(0, 6);
+    if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
+    box.innerHTML = list.map(function (c, n) {
+      return '<button type="button" class="mention' + (n === 0 ? ' on' : '') + '" data-tag="' + esc(atTag(c)) + '"><b>' + esc(c.name) + '</b>' + (c.role ? ' <span class="grey">' + esc(c.role) + '</span>' : '') + '</button>';
+    }).join('');
+    box.hidden = false;
+  }
+  function pickMention(el, tag) {
+    var pos = el.selectionStart, before = el.value.slice(0, pos).replace(/@[\w-]*$/, '@' + tag + ' ');
+    el.value = before + el.value.slice(pos).replace(/^\s+/, '');
+    el.focus(); el.setSelectionRange(before.length, before.length);
+    var box = document.getElementById('mentions'); if (box) { box.hidden = true; box.innerHTML = ''; }
+  }
+  root.addEventListener('input', function (e) { if (e.target.id === 'say_text') showMentions(e.target); });
+  root.addEventListener('keydown', function (e) {
+    if (e.target.id !== 'say_text') return;
+    var box = document.getElementById('mentions'); if (!box || box.hidden) return;
+    var bs = box.querySelectorAll('.mention'), cur = box.querySelector('.mention.on'), n = Array.prototype.indexOf.call(bs, cur);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (cur) cur.classList.remove('on'); bs[(n + (e.key === 'ArrowDown' ? 1 : bs.length - 1)) % bs.length].classList.add('on'); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { if (cur) { e.preventDefault(); pickMention(e.target, cur.getAttribute('data-tag')); } }
+    else if (e.key === 'Escape') { box.hidden = true; }
+  });
+  root.addEventListener('mousedown', function (e) { if (e.target.closest && e.target.closest('.mention')) e.preventDefault(); });
+  root.addEventListener('click', function (e) {
+    var m = e.target.closest && e.target.closest('.mention'); if (!m) return;
+    var el = document.getElementById('say_text'); if (el) pickMention(el, m.getAttribute('data-tag'));
   });
 
   root.addEventListener('change', function (e) {

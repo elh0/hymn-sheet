@@ -274,6 +274,12 @@ async function uiTests() {
   });
   await check('phone: job chat: send a message, others see it, @name turns into their task', async function () {
     await page.click('[data-tab=chat]');
+    await page.focus('#say_text'); await page.keyboard.type('hey @mi');
+    await page.waitForSelector('#mentions .mention');
+    assert(/Milo Brown/.test(await page.textContent('#mentions')), await page.textContent('#mentions'));
+    await page.keyboard.press('Enter');
+    assert.strictEqual(await page.inputValue('#say_text'), 'hey @Milo ');
+    assert(await page.$('#mentions[hidden]'));
     await page.fill('#say_text', '@Milo can you bring the spare LCS?');
     await page.click('.say button[type=submit]');
     await page.waitForFunction(function () { return !document.getElementById('status').classList.contains('show'); });
